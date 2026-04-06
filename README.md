@@ -10,7 +10,7 @@ Anthropic has clarified that personal use of the Claude Agent SDK is covered und
 
 Tell your AI coding agent:
 
-> "Clone https://github.com/coleam00/llm-personal-kb into this project. Set up the Claude Code hooks so my conversations automatically get captured into daily logs, compiled into a knowledge base, and injected back into future sessions. Read the AGENTS.md for the full technical reference on how everything works."
+> "Clone https://github.com/coleam00/claude-memory-compiler into this project. Set up the Claude Code hooks so my conversations automatically get captured into daily logs, compiled into a knowledge base, and injected back into future sessions. Read the AGENTS.md for the full technical reference on how everything works."
 
 The agent will:
 1. Clone the repo and run `uv sync` to install dependencies

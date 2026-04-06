@@ -27,3 +27,5 @@ scripts/uv.lock
 # OS files
 .DS_Store
 Thumbs.db
+
+.obsidian/
