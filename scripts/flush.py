@@ -82,33 +82,38 @@ async def run_flush(context: str) -> str:
         query,
     )
 
-    prompt = f"""Review the conversation context below and respond with a concise summary
-of important items that should be preserved in the daily log.
+    prompt = f"""Review the conversation context below and extract only durable technical knowledge.
 Do NOT use any tools — just return plain text.
 
-Format your response as a structured daily log entry with these sections:
+This knowledge base captures what was *learned* — not preferences, not decisions about how Claude
+should behave, not project setup. Those live elsewhere. Focus only on things that would help
+someone understand a system better six months from now.
 
-**Context:** [One line about what the user was working on]
+Format your response with only the sections that have real content:
 
-**Key Exchanges:**
-- [Important Q&A or discussions]
+**Context:** [One line: what system/problem was being worked on]
 
-**Decisions Made:**
-- [Any decisions with rationale]
+**Technical Insights:**
+- [New things discovered: API behaviors, library quirks, architectural decisions with rationale]
 
 **Lessons Learned:**
-- [Gotchas, patterns, or insights discovered]
+- [What worked, what didn't, root causes discovered, debugging breakthroughs]
 
-**Action Items:**
-- [Follow-ups or TODOs mentioned]
+**Patterns Worth Repeating:**
+- [Reusable approaches, idioms, or design patterns observed in this session]
 
-Skip anything that is:
-- Routine tool calls or file reads
-- Content that's trivial or obvious
-- Trivial back-and-forth or clarification exchanges
+**Debugging Notes:**
+- [Specific errors encountered and their solutions — reference the system, not the conversation]
 
-Only include sections that have actual content. If nothing is worth saving,
-respond with exactly: FLUSH_OK
+Skip entirely:
+- Behavioral/workflow preferences for the assistant ("don't do X", "always Y") → those go in Claude memory
+- User corrections to assistant tone or style → Claude memory
+- Project scaffolding or config that's already version-controlled
+- Routine operations: sync up, lights out, config backups, git commits
+- Action items, TODOs, or follow-ups (ephemeral — not knowledge)
+- Trivial tool calls, file reads, or back-and-forth clarification
+
+If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
 
 ## Conversation Context
 
@@ -189,6 +194,47 @@ def maybe_trigger_compilation() -> None:
         logging.error("Failed to spawn compile.py: %s", e)
 
 
+def notify_telegram(result: str, session_id: str) -> None:
+    """Send a Telegram notification summarizing the flush result."""
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not bot_token or not chat_id:
+        logging.warning("Telegram credentials not set — skipping notification")
+        return
+
+    short_id = session_id[:8]
+
+    if "FLUSH_OK" in result:
+        text = f"Memory flush ({short_id}) — nothing worth saving."
+    elif "FLUSH_ERROR" in result:
+        text = f"Memory flush ({short_id}) — extraction error. Check flush.log."
+    else:
+        item_count = sum(1 for line in result.splitlines() if line.strip().startswith("- "))
+        context_line = ""
+        for line in result.splitlines():
+            if line.startswith("**Context:**"):
+                context_line = line.replace("**Context:**", "").strip()
+                break
+        parts = [f"Memory flush — {item_count} item{'s' if item_count != 1 else ''} saved"]
+        if context_line:
+            parts.append(context_line)
+        text = "\n".join(parts)
+
+    try:
+        import httpx
+        httpx.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            data={"chat_id": chat_id, "text": text},
+            timeout=10,
+        )
+    except Exception as e:
+        logging.error("Telegram notification failed: %s", e)
+
+
 def main():
     if len(sys.argv) < 3:
         logging.error("Usage: %s <context_file.md> <session_id>", sys.argv[0])
@@ -248,8 +294,12 @@ def main():
     # log hasn't been compiled yet, trigger compile.py in the background.
     maybe_trigger_compilation()
 
+    # Notify Mr.TL via Telegram
+    notify_telegram(response, session_id)
+
     logging.info("Flush complete for session %s", session_id)
 
 
 if __name__ == "__main__":
     main()
+
