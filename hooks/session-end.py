@@ -92,6 +92,72 @@ def extract_conversation_context(transcript_path: Path) -> tuple[str, int]:
     return context, len(recent)
 
 
+# Managed repo paths — sync with C:\Dev\workspace\workspace_sync\managed_repos.psd1 if repos change
+MANAGED_REPOS: list[tuple[str, Path]] = [
+    ("workspace", Path("C:/Dev/workspace")),
+    ("olympus", Path("C:/Dev/olympus")),
+    ("cris", Path("C:/Dev/cris")),
+    ("pantheon", Path("C:/Dev/pantheon")),
+    ("codex", Path("C:/Dev/codex")),
+    ("server-projects", Path("C:/Dev/server-projects")),
+    ("hidden-mechanics-lab", Path("C:/Dev/hidden-mechanics-lab")),
+    ("mayhem-motorsports", Path("C:/Dev/mayhem-motorsports")),
+    ("beacon", Path("C:/Dev/beacon")),
+    ("claude-memory-compiler", Path("C:/Dev/claude-memory-compiler")),
+]
+
+
+def append_to_daily_log_raw(content: str, section: str) -> None:
+    """Append raw content to today's daily log (no LLM — for git data)."""
+    today = datetime.now(timezone.utc).astimezone()
+    log_path = DAILY_DIR / f"{today.strftime('%Y-%m-%d')}.md"
+    if not log_path.exists():
+        DAILY_DIR.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(
+            f"# Daily Log: {today.strftime('%Y-%m-%d')}\n\n## Sessions\n\n## Memory Maintenance\n\n",
+            encoding="utf-8",
+        )
+    time_str = today.strftime("%H:%M")
+    entry = f"### {section} ({time_str})\n\n{content}\n\n"
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(entry)
+
+
+def capture_git_activity() -> None:
+    """Capture recent git commits across managed repos into the daily log."""
+    import subprocess as _sp
+
+    lines: list[str] = []
+    for name, repo_path in MANAGED_REPOS:
+        if not repo_path.exists():
+            continue
+        try:
+            result = _sp.run(
+                ["git", "log", "--oneline", "-5", "--since=12 hours ago"],
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            commits = result.stdout.strip()
+            if commits:
+                lines.append(f"**{name}:**")
+                for line in commits.splitlines():
+                    lines.append(f"  {line}")
+        except Exception as e:
+            logging.debug("git log failed for %s: %s", name, e)
+
+    if not lines:
+        return
+
+    content = "\n".join(lines)
+    try:
+        append_to_daily_log_raw(content, "Git Activity")
+        logging.info("Git activity captured: %d repos with commits", sum(1 for l in lines if l.startswith("**")))
+    except Exception as e:
+        logging.error("Failed to write git activity: %s", e)
+
+
 def main() -> None:
     # Read hook input from stdin
     # Claude Code on Windows may pass paths with unescaped backslashes
@@ -135,6 +201,9 @@ def main() -> None:
     if turn_count < MIN_TURNS_TO_FLUSH:
         logging.info("SKIP: only %d turns (min %d)", turn_count, MIN_TURNS_TO_FLUSH)
         return
+
+    # Capture git activity directly to daily log (no LLM — raw commit data)
+    capture_git_activity()
 
     # Write context to a temp file for the background process
     timestamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
