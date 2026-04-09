@@ -209,7 +209,7 @@ def notify_telegram(result: str, session_id: str) -> None:
     short_id = session_id[:8]
 
     if "FLUSH_OK" in result:
-        text = f"Memory flush ({short_id}) — nothing worth saving."
+        return  # Nothing extracted — no need to ping
     elif "FLUSH_ERROR" in result:
         text = f"Memory flush ({short_id}) — extraction error. Check flush.log."
     else:
