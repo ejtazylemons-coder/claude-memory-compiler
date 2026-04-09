@@ -194,46 +194,6 @@ def maybe_trigger_compilation() -> None:
         logging.error("Failed to spawn compile.py: %s", e)
 
 
-def notify_telegram(result: str, session_id: str) -> None:
-    """Send a Telegram notification summarizing the flush result."""
-    from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env")
-
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-
-    if not bot_token or not chat_id:
-        logging.warning("Telegram credentials not set — skipping notification")
-        return
-
-    short_id = session_id[:8]
-
-    if "FLUSH_OK" in result:
-        return  # Nothing extracted — no need to ping
-    elif "FLUSH_ERROR" in result:
-        text = f"Memory flush ({short_id}) — extraction error. Check flush.log."
-    else:
-        item_count = sum(1 for line in result.splitlines() if line.strip().startswith("- "))
-        context_line = ""
-        for line in result.splitlines():
-            if line.startswith("**Context:**"):
-                context_line = line.replace("**Context:**", "").strip()
-                break
-        parts = [f"Memory flush — {item_count} item{'s' if item_count != 1 else ''} saved"]
-        if context_line:
-            parts.append(context_line)
-        text = "\n".join(parts)
-
-    try:
-        import httpx
-        httpx.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            data={"chat_id": chat_id, "text": text},
-            timeout=10,
-        )
-    except Exception as e:
-        logging.error("Telegram notification failed: %s", e)
-
 
 def main():
     if len(sys.argv) < 3:
@@ -293,9 +253,6 @@ def main():
     # End-of-day auto-compilation: if it's past the compile hour and today's
     # log hasn't been compiled yet, trigger compile.py in the background.
     maybe_trigger_compilation()
-
-    # Notify Mr.TL via Telegram
-    notify_telegram(response, session_id)
 
     logging.info("Flush complete for session %s", session_id)
 
