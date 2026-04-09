@@ -141,8 +141,9 @@ def main() -> None:
     # Spawn flush.py as a background process
     flush_script = SCRIPTS_DIR / "flush.py"
 
+    UV = r"C:\Users\Eric\.local\bin\uv.exe"
     cmd = [
-        "uv",
+        UV,
         "run",
         "--directory",
         str(ROOT),

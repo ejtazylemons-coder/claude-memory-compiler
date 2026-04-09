@@ -24,8 +24,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DAILY_DIR = ROOT / "daily"
 SCRIPTS_DIR = ROOT / "scripts"
+
+# Import shared path constant — daily logs live in Obsidian vault
+sys.path.insert(0, str(ROOT / "scripts"))
+from config import DAILY_DIR  # C:\Obsidian\Second Brain\Claude\Knowledge\daily
 STATE_FILE = SCRIPTS_DIR / "last-flush.json"
 LOG_FILE = SCRIPTS_DIR / "flush.log"
 
@@ -179,7 +182,8 @@ def maybe_trigger_compilation() -> None:
 
     logging.info("End-of-day compilation triggered (after %d:00)", COMPILE_AFTER_HOUR)
 
-    cmd = ["uv", "run", "--directory", str(ROOT), "python", str(compile_script)]
+    UV = r"C:\Users\Eric\.local\bin\uv.exe"
+    cmd = [UV, "run", "--directory", str(ROOT), "python", str(compile_script)]
 
     kwargs: dict = {}
     if sys.platform == "win32":

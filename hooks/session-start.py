@@ -21,10 +21,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Paths relative to project root
-ROOT = Path(__file__).resolve().parent.parent
-KNOWLEDGE_DIR = ROOT / "knowledge"
-DAILY_DIR = ROOT / "daily"
+# Knowledge base lives in Obsidian vault
+KB_ROOT = Path("C:/Obsidian/Second Brain/Claude/Knowledge")
+KNOWLEDGE_DIR = KB_ROOT / "knowledge"
+DAILY_DIR = KB_ROOT / "daily"
 INDEX_FILE = KNOWLEDGE_DIR / "index.md"
 
 MAX_CONTEXT_CHARS = 20_000

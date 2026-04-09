@@ -3,14 +3,19 @@
 from pathlib import Path
 from datetime import datetime, timezone
 
-# ── Paths ──────────────────────────────────────────────────────────────
+# ── Repo root (scripts, hooks live here) ────────────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DAILY_DIR = ROOT_DIR / "daily"
-KNOWLEDGE_DIR = ROOT_DIR / "knowledge"
+
+# ── Knowledge base lives in Obsidian vault (auto-syncs between machines) ─
+KB_ROOT = Path("C:/Obsidian/Second Brain/Claude/Knowledge")
+DAILY_DIR = KB_ROOT / "daily"
+KNOWLEDGE_DIR = KB_ROOT / "knowledge"
 CONCEPTS_DIR = KNOWLEDGE_DIR / "concepts"
 CONNECTIONS_DIR = KNOWLEDGE_DIR / "connections"
 QA_DIR = KNOWLEDGE_DIR / "qa"
-REPORTS_DIR = ROOT_DIR / "reports"
+REPORTS_DIR = KB_ROOT / "reports"
+
+# ── Repo-local paths (scripts, state, logs) ─────────────────────────────
 SCRIPTS_DIR = ROOT_DIR / "scripts"
 HOOKS_DIR = ROOT_DIR / "hooks"
 AGENTS_FILE = ROOT_DIR / "AGENTS.md"
@@ -20,7 +25,7 @@ LOG_FILE = KNOWLEDGE_DIR / "log.md"
 STATE_FILE = SCRIPTS_DIR / "state.json"
 
 # ── Timezone ───────────────────────────────────────────────────────────
-TIMEZONE = "America/Chicago"
+TIMEZONE = "America/New_York"
 
 
 def now_iso() -> str:

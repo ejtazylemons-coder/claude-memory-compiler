@@ -25,7 +25,8 @@ if os.environ.get("CLAUDE_INVOKED_BY"):
     sys.exit(0)
 
 ROOT = Path(__file__).resolve().parent.parent
-DAILY_DIR = ROOT / "daily"
+KB_ROOT = Path("C:/Obsidian/Second Brain/Claude/Knowledge")
+DAILY_DIR = KB_ROOT / "daily"
 SCRIPTS_DIR = ROOT / "scripts"
 STATE_DIR = SCRIPTS_DIR
 
@@ -143,8 +144,9 @@ def main() -> None:
     # Spawn flush.py as a background process
     flush_script = SCRIPTS_DIR / "flush.py"
 
+    UV = r"C:\Users\Eric\.local\bin\uv.exe"
     cmd = [
-        "uv",
+        UV,
         "run",
         "--directory",
         str(ROOT),
