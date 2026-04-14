@@ -16,7 +16,9 @@ Configure in .claude/settings.json:
 }
 """
 
+import hashlib
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +31,57 @@ INDEX_FILE = KNOWLEDGE_DIR / "index.md"
 
 MAX_CONTEXT_CHARS = 20_000
 MAX_LOG_LINES = 30
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = ROOT / "scripts"
+STATE_FILE = SCRIPTS_DIR / "state.json"
+UV = r"C:\Users\Eric\.local\bin\uv.exe"
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def _has_uncompiled_logs() -> bool:
+    """Return True if any daily log file hasn't been compiled (or has changed since)."""
+    if not DAILY_DIR.exists():
+        return False
+    state: dict = {}
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    ingested = state.get("ingested", {})
+    for log_path in sorted(DAILY_DIR.glob("*.md")):
+        prev = ingested.get(log_path.name, {})
+        if not prev or prev.get("hash") != _file_hash(log_path):
+            return True
+    return False
+
+
+def _spawn_compile_if_needed() -> None:
+    """If uncompiled logs exist, spawn compile.py in the background (fire and forget)."""
+    if not _has_uncompiled_logs():
+        return
+    compile_script = SCRIPTS_DIR / "compile.py"
+    if not compile_script.exists():
+        return
+    cmd = [UV, "run", "--directory", str(ROOT), "python", str(compile_script)]
+    kwargs: dict = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **kwargs,
+        )
+    except Exception:
+        pass  # Never block session start due to compile errors
 
 
 def get_recent_log() -> str:
@@ -76,6 +129,10 @@ def build_context() -> str:
 
 
 def main():
+    # Catch up on any uncompiled daily logs before injecting context.
+    # Runs in the background — never blocks session start.
+    _spawn_compile_if_needed()
+
     context = build_context()
 
     output = {
