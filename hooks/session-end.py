@@ -178,6 +178,23 @@ def main() -> None:
 
     logging.info("SessionEnd fired: session=%s source=%s", session_id, source)
 
+    # Dedup guard: if we already processed this session in the last 5 minutes, skip.
+    # Prevents duplicate flush.py spawns that cause Agent SDK init-timeout races.
+    import time
+    lock_path = SCRIPTS_DIR / f".lock-{session_id}.flag"
+    if lock_path.exists():
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+            if age < 300:
+                logging.info("SKIP: session %s flushed %.1fs ago (dedup lock)", session_id, age)
+                return
+        except OSError:
+            pass
+    try:
+        lock_path.write_text(str(int(time.time())), encoding="utf-8")
+    except OSError as e:
+        logging.warning("Could not write dedup lock: %s", e)
+
     if not transcript_path_str or not isinstance(transcript_path_str, str):
         logging.info("SKIP: no transcript path")
         return

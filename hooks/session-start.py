@@ -61,12 +61,33 @@ def _has_uncompiled_logs() -> bool:
 
 
 def _spawn_compile_if_needed() -> None:
-    """If uncompiled logs exist, spawn compile.py in the background (fire and forget)."""
+    """If uncompiled logs exist, spawn compile.py in the background (fire and forget).
+
+    A global lockfile prevents overlapping compiles — critical because compile.py
+    spawns the Claude Agent SDK which racing would cause 'Control request timeout:
+    initialize' errors.
+    """
     if not _has_uncompiled_logs():
         return
     compile_script = SCRIPTS_DIR / "compile.py"
     if not compile_script.exists():
         return
+
+    # Global compile lock — skip if another compile is running or finished in last 10 min
+    import time
+    lock_path = SCRIPTS_DIR / ".compile-lock.flag"
+    if lock_path.exists():
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+            if age < 600:
+                return
+        except OSError:
+            pass
+    try:
+        lock_path.write_text(str(int(time.time())), encoding="utf-8")
+    except OSError:
+        pass
+
     cmd = [UV, "run", "--directory", str(ROOT), "python", str(compile_script)]
     kwargs: dict = {}
     if sys.platform == "win32":

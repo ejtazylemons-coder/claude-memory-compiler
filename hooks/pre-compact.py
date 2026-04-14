@@ -108,6 +108,23 @@ def main() -> None:
 
     logging.info("PreCompact fired: session=%s", session_id)
 
+    # Dedup guard: PreCompact can fire multiple times on long sessions. Skip if
+    # we flushed this session in the last 5 minutes to avoid overlapping API calls.
+    import time
+    lock_path = SCRIPTS_DIR / f".lock-precompact-{session_id}.flag"
+    if lock_path.exists():
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+            if age < 300:
+                logging.info("SKIP: precompact for %s flushed %.1fs ago (dedup lock)", session_id, age)
+                return
+        except OSError:
+            pass
+    try:
+        lock_path.write_text(str(int(time.time())), encoding="utf-8")
+    except OSError as e:
+        logging.warning("Could not write dedup lock: %s", e)
+
     # transcript_path can be empty (known Claude Code bug #13668)
     if not transcript_path_str or not isinstance(transcript_path_str, str):
         logging.info("SKIP: no transcript path")
