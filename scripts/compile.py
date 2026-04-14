@@ -133,10 +133,12 @@ Read the daily log above and compile it into wiki articles following the schema 
             prompt=prompt,
             options=ClaudeAgentOptions(
                 cwd=str(ROOT_DIR),
+                model="claude-sonnet-4-5",
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep"],
                 permission_mode="acceptEdits",
                 max_turns=30,
+                max_budget_usd=0.50,
             ),
         ):
             if isinstance(message, AssistantMessage):

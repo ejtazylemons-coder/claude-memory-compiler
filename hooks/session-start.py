@@ -150,9 +150,8 @@ def build_context() -> str:
 
 
 def main():
-    # Catch up on any uncompiled daily logs before injecting context.
-    # Runs in the background — never blocks session start.
-    _spawn_compile_if_needed()
+    # Auto-compile disabled 2026-04-14 — replaced by weekly rollup (scripts/weekly-rollup.py).
+    # Session-end still writes daily logs (free, local). Compilation is now weekly only.
 
     context = build_context()
 
