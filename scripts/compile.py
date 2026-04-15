@@ -101,8 +101,13 @@ Read the daily log above and compile it into wiki articles following the schema 
    relationships between 2+ existing concepts
 4. **Update existing articles** if this log adds new information to concepts already in the wiki
    - Read the existing article, add the new information, add the source to frontmatter
-5. **Update knowledge/index.md** - Add new entries to the table
-   - Each entry: `| [[path/slug]] | One-line summary | source-file | {timestamp[:10]} |`
+5. **Update knowledge/index.md** - Add new entries under the correct category section
+   - The index is a wiki with category sections (Infrastructure & Monitoring, Security, Protocols & Workflows, Knowledge Systems, BEACON Platform, Connections)
+   - Add each new article as a table row under the matching section: `| [[path/slug]] | One-line summary | source-file | {timestamp[:10]} |`
+   - If an existing article was updated, update its "Updated" date in its row
+   - If no existing section fits the new article, create a new `## Category Name` section with a table
+   - Update the article count in the header line (e.g. `> **20 articles**`) after adding entries
+   - Update the Table of Contents if a new section was added
 6. **Append to knowledge/log.md** - Add a timestamped entry:
    ```
    ## [{timestamp}] compile | {log_path.name}

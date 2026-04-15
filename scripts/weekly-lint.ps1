@@ -1,7 +1,7 @@
 # weekly-lint.ps1
 # Runs structural health checks on the knowledge base and logs results.
 # Registered as a weekly Task Scheduler job.
-# Runs every Sunday at 9 PM. No LLM calls — structural checks only (free).
+# Runs every Sunday at 8 AM. No LLM calls — structural checks only (free).
 # Results are reported during next sync up, not via Telegram.
 
 $ErrorActionPreference = "SilentlyContinue"
