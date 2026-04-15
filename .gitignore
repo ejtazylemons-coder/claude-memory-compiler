@@ -36,3 +36,4 @@ scripts/.lock-*.flag
 scripts/.compile-lock.flag
 scripts/weekly-budget.json
 scripts/weekly-rollup.log
+scripts/lint-cron.log
