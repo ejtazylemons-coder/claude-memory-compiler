@@ -3,7 +3,7 @@ REM Claude Weekly Rollup - scheduled task runner
 REM After the rollup completes, push a heartbeat beacon to Homebase so Hestia can monitor.
 
 cd /d C:\Dev\claude-memory-compiler
-"C:\Users\Eric\.local\bin\uv.exe" run python scripts\weekly-rollup.py >> scripts\weekly-rollup.log 2>&1
+"%USERPROFILE%\.local\bin\uv.exe" run python scripts\weekly-rollup.py >> scripts\weekly-rollup.log 2>&1
 set RC=%ERRORLEVEL%
 
 REM Push beacon to Homebase (ignore failure - rollup success shouldn't depend on network)
