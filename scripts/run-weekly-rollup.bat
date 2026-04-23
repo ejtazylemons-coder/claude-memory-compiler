@@ -2,6 +2,11 @@
 REM Claude Weekly Rollup - scheduled task runner
 REM After the rollup completes, push a heartbeat beacon to Homebase so Hestia can monitor.
 
+REM Force UTF-8 stdout/stderr so Unicode chars (arrows, em-dash) in prints don't
+REM crash under Windows cp1252 console encoding. Silent failure 2026-04-19
+REM traced to UnicodeEncodeError on → (right-arrow) in main() print.
+set PYTHONIOENCODING=utf-8
+
 cd /d C:\Dev\claude-memory-compiler
 "%USERPROFILE%\.local\bin\uv.exe" run python scripts\weekly-rollup.py >> scripts\weekly-rollup.log 2>&1
 set RC=%ERRORLEVEL%
