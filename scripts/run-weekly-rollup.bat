@@ -12,7 +12,9 @@ cd /d C:\Dev\claude-memory-compiler
 set RC=%ERRORLEVEL%
 
 REM Push beacon to Homebase (ignore failure - rollup success shouldn't depend on network)
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+REM -WindowStyle Hidden per feedback_windows_hooks_hidden.md — this child PS call
+REM was popping a visible window during the 2026-04-26 9:00 PM Saturday run.
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ^
   "$ts = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz');" ^
   "$body = @{ name = 'ClaudeWeeklyRollup'; machine = $env:COMPUTERNAME; last_run = $ts; exit_code = %RC% } | ConvertTo-Json -Compress;" ^
   "$body | ssh homebase 'cat > /root/hestia/beacons/claude-weekly-rollup.json'" >> scripts\weekly-rollup.log 2>&1
