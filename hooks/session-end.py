@@ -227,16 +227,14 @@ def main() -> None:
     context_file = STATE_DIR / f"session-flush-{session_id}-{timestamp}.md"
     context_file.write_text(context, encoding="utf-8")
 
-    # Spawn flush.py as a background process
+    # Spawn flush.py as a background process via the venv python directly.
+    # Previous wiring used a hardcoded uv.exe path (`C:\Users\Eric\.local\bin\uv.exe`)
+    # which broke on any machine that wasn't Work PC. Fixed 2026-05-02 alongside the
+    # VBS-wrapper-stdin-loss fix; venv python avoids both portability + spawn cost.
     flush_script = SCRIPTS_DIR / "flush.py"
-
-    UV = r"C:\Users\Eric\.local\bin\uv.exe"
+    venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
     cmd = [
-        UV,
-        "run",
-        "--directory",
-        str(ROOT),
-        "python",
+        str(venv_python),
         str(flush_script),
         str(context_file),
         session_id,
@@ -256,6 +254,63 @@ def main() -> None:
         logging.info("Spawned flush.py for session %s (%d turns, %d chars)", session_id, turn_count, len(context))
     except Exception as e:
         logging.error("Failed to spawn flush.py: %s", e)
+        return
+
+    # Write local beacon + SSH push to Homebase for Ops worker `memory-compiler-flush`.
+    # Fire-and-forget — must never crash the hook. Beacon staleness is what the
+    # `memory-compiler-flush` worker watches for; if Telegram fires a stale alert,
+    # see runbook `Harness/runbooks/memory-compiler-flush-stale.md`.
+    publish_beacon(session_id, turn_count, len(context))
+
+
+def publish_beacon(session_id: str, turn_count: int, ctx_chars: int) -> None:
+    """Write local beacon JSON + SSH-push to Homebase. Failures are logged, not raised."""
+    import platform
+    beacon_local = SCRIPTS_DIR / "last-flush.beacon.json"
+    beacon_remote = "/root/hestia/beacons/memory-compiler-flush.json"
+    push_log = SCRIPTS_DIR / "beacon-push.log"
+
+    now_ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
+    payload = {
+        "name": "memory-compiler-flush",
+        "machine": platform.node(),
+        "last_run": now_ts,
+        "exit_code": 0,
+        "summary": f"flush spawned for session {session_id[:8]} ({turn_count} turns, {ctx_chars} chars)",
+        "version": "1.0.0",
+    }
+    body = json.dumps(payload, separators=(",", ":"))
+
+    try:
+        beacon_local.write_text(body, encoding="utf-8")
+    except OSError as e:
+        logging.error("Beacon: failed to write local file: %s", e)
+        return
+
+    # SSH push — fire-and-forget. Never block more than a few seconds.
+    creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+             "homebase", f"cat > {beacon_remote}"],
+            input=body,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            creationflags=creation_flags,
+        )
+        if result.returncode == 0:
+            with open(push_log, "a", encoding="utf-8") as f:
+                f.write(f"{now_ts} pushed OK\n")
+        else:
+            with open(push_log, "a", encoding="utf-8") as f:
+                f.write(f"{now_ts} push FAIL rc={result.returncode} err={result.stderr.strip()[:200]}\n")
+    except Exception as e:
+        try:
+            with open(push_log, "a", encoding="utf-8") as f:
+                f.write(f"{now_ts} push ERROR {type(e).__name__}: {str(e)[:200]}\n")
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
