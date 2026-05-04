@@ -155,16 +155,14 @@ def main() -> None:
     context_file = STATE_DIR / f"flush-context-{session_id}-{timestamp}.md"
     context_file.write_text(context, encoding="utf-8")
 
-    # Spawn flush.py as a background process
+    # Spawn flush.py as a background process via the venv python directly.
+    # Previous wiring used a hardcoded uv.exe path (`C:\Users\Eric\.local\bin\uv.exe`)
+    # which broke on any machine that wasn't Work PC — caused [WinError 2] on Home PC
+    # 2026-05-03 07:00. Mirrors the 2026-05-02 fix to session-end.py.
     flush_script = SCRIPTS_DIR / "flush.py"
-
-    UV = r"C:\Users\Eric\.local\bin\uv.exe"
+    venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
     cmd = [
-        UV,
-        "run",
-        "--directory",
-        str(ROOT),
-        "python",
+        str(venv_python),
         str(flush_script),
         str(context_file),
         session_id,
