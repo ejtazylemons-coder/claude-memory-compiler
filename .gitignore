@@ -37,3 +37,5 @@ scripts/.compile-lock.flag
 scripts/weekly-budget.json
 scripts/weekly-rollup.log
 scripts/lint-cron.log
+scripts/beacon-push.log
+scripts/last-flush.beacon.json
