@@ -39,3 +39,5 @@ scripts/weekly-rollup.log
 scripts/lint-cron.log
 scripts/beacon-push.log
 scripts/last-flush.beacon.json
+scripts/monthly-state-budget.json
+scripts/monthly-state-synthesis.log
