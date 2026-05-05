@@ -69,7 +69,12 @@ def last_7_days_logs() -> list[Path]:
     return logs
 
 
-async def run_rollup(logs: list[Path], output_path: Path, remaining_budget: float) -> float:
+async def run_rollup(logs: list[Path], output_path: Path, remaining_budget: float) -> dict:
+    """Run the weekly rollup. Returns dict with cost/error/output_exists.
+
+    Caller must check error AND output_exists — a $0 cost with output_exists=False
+    is a silent failure that must NOT be counted as a successful run.
+    """
     from claude_agent_sdk import (
         AssistantMessage,
         ClaudeAgentOptions,
@@ -127,6 +132,11 @@ Rules:
 
     cap = min(PER_RUN_CAP_USD, remaining_budget)
     cost = 0.0
+    # Don't swallow exceptions — the 2026-05-03 silent-zero incident was caused
+    # by a bare `except Exception: print(f"  Error: {e}")` that hid SDK/network
+    # failures behind a $0 cost. Caller must verify output_path.exists() AND
+    # check the returned dict for a non-None error before trusting cost.
+    error_msg: str | None = None
     try:
         async for message in query(
             prompt=prompt,
@@ -148,9 +158,10 @@ Rules:
                     if isinstance(block, TextBlock):
                         pass
     except Exception as e:
-        print(f"  Error: {e}")
+        error_msg = f"{type(e).__name__}: {e}"
+        print(f"  Error: {error_msg}")
 
-    return cost
+    return {"cost": cost, "error": error_msg, "output_exists": output_path.exists()}
 
 
 def main():
@@ -185,7 +196,17 @@ def main():
         print("Monthly budget exhausted. Skipping.")
         sys.exit(0)
 
-    cost = asyncio.run(run_rollup(logs, output_path, remaining))
+    result = asyncio.run(run_rollup(logs, output_path, remaining))
+    cost = result["cost"]
+
+    # Silent-failure detection: cost reported as $0 AND output not written =
+    # SDK/agent silent failure (the 2026-05-03 incident). Refuse to count it
+    # as a clean run; surface a non-zero exit so the wrapper sees it.
+    if not result["output_exists"]:
+        print(f"\nFAIL: rollup returned cost=${cost:.4f} but {output_path.name} was not written")
+        if result["error"]:
+            print(f"  underlying error: {result['error']}")
+        sys.exit(1)
 
     budget["spent"] = round(budget.get("spent", 0.0) + cost, 4)
     budget.setdefault("runs", []).append(

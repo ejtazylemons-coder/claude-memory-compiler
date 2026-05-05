@@ -132,7 +132,9 @@ Read the daily log above and compile it into wiki articles following the schema 
 """
 
     cost = 0.0
-
+    # Don't swallow exceptions silently — see weekly-rollup.py for the same fix.
+    # Caller (run-weekly-compile.py) must distinguish $0 cost from $0 cost + raise.
+    error_raised: BaseException | None = None
     try:
         async for message in query(
             prompt=prompt,
@@ -154,18 +156,24 @@ Read the daily log above and compile it into wiki articles following the schema 
                 cost = message.total_cost_usd or 0.0
                 print(f"  Cost: ${cost:.4f}")
     except Exception as e:
-        print(f"  Error: {e}")
-        return 0.0
+        error_raised = e
+        print(f"  Error: {type(e).__name__}: {e}")
 
-    # Update state
-    rel_path = log_path.name
-    state.setdefault("ingested", {})[rel_path] = {
-        "hash": file_hash(log_path),
-        "compiled_at": now_iso(),
-        "cost_usd": cost,
-    }
-    state["total_cost"] = state.get("total_cost", 0.0) + cost
-    save_state(state)
+    # Only record state if the compile didn't raise. A bare $0 cost (with no
+    # exception) still updates state — the LLM may have legitimately decided
+    # there was nothing new to extract for this day.
+    if error_raised is None:
+        rel_path = log_path.name
+        state.setdefault("ingested", {})[rel_path] = {
+            "hash": file_hash(log_path),
+            "compiled_at": now_iso(),
+            "cost_usd": cost,
+        }
+        state["total_cost"] = state.get("total_cost", 0.0) + cost
+        save_state(state)
+    else:
+        # Re-raise so caller can react. Returning 0.0 silently was the bug.
+        raise error_raised
 
     return cost
 
@@ -175,6 +183,7 @@ def main():
     parser.add_argument("--all", action="store_true", help="Force recompile all logs")
     parser.add_argument("--file", type=str, help="Compile a specific daily log file")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be compiled")
+    parser.add_argument("--limit", type=int, default=0, help="Max files to compile this run (0=no limit)")
     args = parser.parse_args()
 
     state = load_state()
@@ -206,6 +215,10 @@ def main():
     if not to_compile:
         print("Nothing to compile - all daily logs are up to date.")
         return
+
+    if args.limit > 0 and len(to_compile) > args.limit:
+        print(f"Backlog has {len(to_compile)} file(s); limiting this run to {args.limit} (per-run safety cap).")
+        to_compile = to_compile[: args.limit]
 
     print(f"{'[DRY RUN] ' if args.dry_run else ''}Files to compile ({len(to_compile)}):")
     for f in to_compile:

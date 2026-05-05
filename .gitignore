@@ -41,3 +41,7 @@ scripts/beacon-push.log
 scripts/last-flush.beacon.json
 scripts/monthly-state-budget.json
 scripts/monthly-state-synthesis.log
+scripts/combined-budget.json
+scripts/.silent-zero-counter.json
+scripts/.compiler-disabled.flag
+scripts/weekly-compile.beacon.json
