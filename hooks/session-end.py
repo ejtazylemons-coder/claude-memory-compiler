@@ -127,6 +127,11 @@ def capture_git_activity() -> None:
     """Capture recent git commits across managed repos into the daily log."""
     import subprocess as _sp
 
+    # CREATE_NO_WINDOW suppresses the brief CMD popup on every SessionEnd
+    # (per feedback_windows_hooks_hidden.md) AND avoids a console-pipe race
+    # condition that surfaces as Windows error 0x800700e8 (ERROR_NO_DATA).
+    no_window = _sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
     lines: list[str] = []
     for name, repo_path in MANAGED_REPOS:
         if not repo_path.exists():
@@ -138,6 +143,7 @@ def capture_git_activity() -> None:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=no_window,
             )
             commits = result.stdout.strip()
             if commits:

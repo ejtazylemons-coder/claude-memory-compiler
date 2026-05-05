@@ -21,6 +21,15 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+# Defensive: force UTF-8 stdout regardless of how invoked. The bat sets
+# PYTHONIOENCODING=utf-8 but a manual run from cp1252 PowerShell would crash
+# at line 182's `→` print otherwise. The 2026-04-19 silent-failure bug class.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 from config import DAILY_DIR, KB_ROOT, SCRIPTS_DIR
 
 WEEKLY_DIR = KB_ROOT / "weekly"
@@ -83,14 +92,23 @@ async def run_rollup(logs: list[Path], output_path: Path, remaining_budget: floa
         query,
     )
 
+    # Per-day cap — bundled CC subprocess has a Windows pipe buffer limit
+    # somewhere between 15KB and 20KB on the prompt; >20KB returns silently
+    # with cost=$0 + no response. Cap each day's content to ~1.7KB so the
+    # combined log_body across 8 days fits well under the threshold.
+    PER_DAY_CAP = 1700
     combined = []
     for log in logs:
-        combined.append(f"## {log.stem}\n\n{log.read_text(encoding='utf-8')}")
+        body = log.read_text(encoding="utf-8")
+        if len(body) > PER_DAY_CAP:
+            body = body[:PER_DAY_CAP] + f"\n\n...(truncated from {len(body)} chars)"
+        combined.append(f"## {log.stem}\n\n{body}")
     log_body = "\n\n---\n\n".join(combined)
 
-    # Hard truncate to keep prompt size sane (~400K chars ≈ 100K tokens)
-    if len(log_body) > 400_000:
-        log_body = log_body[:400_000] + "\n\n...(truncated for budget)"
+    # Final hard cap as belt-and-suspenders.
+    PROMPT_HARD_CAP = 15_000
+    if len(log_body) > PROMPT_HARD_CAP:
+        log_body = log_body[:PROMPT_HARD_CAP] + "\n\n...(truncated)"
 
     prompt = f"""You are summarizing a week of Claude Code session logs into a short, useful weekly note.
 
@@ -100,12 +118,11 @@ async def run_rollup(logs: list[Path], output_path: Path, remaining_budget: floa
 
 ## Your task
 
-Write ONE markdown file to: {output_path}
+Respond with ONLY the markdown content of the weekly note. Do not call any tools, do not say anything else — just emit the markdown directly.
 
 Format:
 
-```markdown
-# Week of {logs[0].stem} → {logs[-1].stem}
+# Week of {logs[0].stem} -> {logs[-1].stem}
 
 ## Themes
 - (3-5 bullets — the big threads of the week, not every small thing)
@@ -121,32 +138,29 @@ Format:
 
 ## Money spent / saved
 - (if cost/budget topics came up, summarize)
-```
 
 Rules:
 - Keep the whole file under 80 lines. Terse bullets, no fluff.
 - Skip conversations that were just config tweaks or small talk.
 - Reference dates (e.g. "2026-04-14") when citing a decision or event.
-- Write ONE file. Do not create any other files. Do not edit other files.
+- Output ONLY the markdown — no explanations, no fenced code blocks around it.
 """
 
     cap = min(PER_RUN_CAP_USD, remaining_budget)
     cost = 0.0
-    # Don't swallow exceptions — the 2026-05-03 silent-zero incident was caused
-    # by a bare `except Exception: print(f"  Error: {e}")` that hid SDK/network
-    # failures behind a $0 cost. Caller must verify output_path.exists() AND
-    # check the returned dict for a non-None error before trusting cost.
+    # Mirror flush.py's pattern: allowed_tools=[], agent returns markdown as
+    # text, Python writes the file. This avoids the bundled CC's Write-tool
+    # path-confinement edge cases that caused the 2026-04-19 → 2026-05-04
+    # silent-zero failures (SDK reports cost=$0 + no file written).
     error_msg: str | None = None
+    response_text = ""
     try:
         async for message in query(
             prompt=prompt,
             options=ClaudeAgentOptions(
                 cwd=str(SCRIPTS_DIR.parent),
-                model="claude-sonnet-4-5",
-                system_prompt={"type": "preset", "preset": "claude_code"},
-                allowed_tools=["Write"],
-                permission_mode="acceptEdits",
-                max_turns=5,
+                allowed_tools=[],
+                max_turns=2,
                 max_budget_usd=cap,
             ),
         ):
@@ -156,10 +170,25 @@ Rules:
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
-                        pass
+                        response_text += block.text
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
         print(f"  Error: {error_msg}")
+
+    # Python writes the file — not the agent. Strip leading/trailing whitespace
+    # and any accidental fenced code block wrapping.
+    if response_text.strip() and not error_msg:
+        clean = response_text.strip()
+        if clean.startswith("```"):
+            # Strip wrapping fence if model ignored the no-fence rule
+            lines = clean.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean = "\n".join(lines)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(clean + "\n", encoding="utf-8")
 
     return {"cost": cost, "error": error_msg, "output_exists": output_path.exists()}
 

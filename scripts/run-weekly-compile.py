@@ -27,6 +27,16 @@ import time
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
+# Force UTF-8 stdout/stderr so captured subprocess output (which may contain
+# arrows, em-dashes, etc.) can be re-printed regardless of how this script
+# was launched. The bat already sets PYTHONIOENCODING=utf-8, but a manual
+# invocation from a cp1252 PowerShell would otherwise crash mid-run.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # already UTF-8 or unsupported on this stream
+
 import budget_guard
 from config import DAILY_DIR, KB_ROOT, SCRIPTS_DIR
 
@@ -242,28 +252,33 @@ def main() -> int:
 
     overall_ok = rollup_ok and compile_ok
 
-    # Compute this-run cost from the budget files (rollup + compile each track
-    # their own; combined-budget will be advanced via record_run by both).
-    # For simplicity here we read the last entries of each.
+    # Compute this-run cost from the budget files. Record cost EVEN ON PARTIAL
+    # FAILURE — we still spent money on whatever did run, and the budget cap
+    # depends on tracking it accurately. Cap-overshoot during partial failures
+    # was the original 2026-04-14 cost-explosion mode.
     this_run_cost = 0.0
     rollup_budget_path = SCRIPTS_DIR / "weekly-budget.json"
-    if rollup_ok and rollup_budget_path.exists():
+    if not args.compile_only and rollup_budget_path.exists():
         try:
             rb = json.loads(rollup_budget_path.read_text(encoding="utf-8"))
             runs = rb.get("runs", [])
-            if runs:
+            # Last run from rollup-budget — its ts will match this orchestrator
+            # invocation since rollup ran in this same process tree.
+            if runs and runs[-1].get("ts", "") >= started_at[:13]:
                 this_run_cost += float(runs[-1].get("cost", 0))
         except (json.JSONDecodeError, OSError):
             pass
     state_path = SCRIPTS_DIR / "state.json"
-    if compile_ok and state_path.exists():
+    if not args.rollup_only and state_path.exists():
         try:
             st = json.loads(state_path.read_text(encoding="utf-8"))
-            # Walk the most-recently-compiled entries (rough approximation)
             ingested = st.get("ingested", {})
-            recent = sorted(ingested.values(), key=lambda x: x.get("compiled_at", ""), reverse=True)
-            for entry in recent[: (compile_count_before - compile_count_after)]:
-                this_run_cost += float(entry.get("cost_usd", 0))
+            # Walk entries by compiled_at, take any compiled within this run's
+            # wall-clock window. Includes successful files even if a later
+            # file in the same loop crashed.
+            for entry in ingested.values():
+                if entry.get("compiled_at", "") >= started_at[:13]:
+                    this_run_cost += float(entry.get("cost_usd", 0))
         except (json.JSONDecodeError, OSError):
             pass
 

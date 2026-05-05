@@ -18,7 +18,16 @@ import asyncio
 import sys
 from pathlib import Path
 
-from config import AGENTS_FILE, CONCEPTS_DIR, CONNECTIONS_DIR, DAILY_DIR, KNOWLEDGE_DIR, now_iso
+# Defensive: force UTF-8 stdout regardless of how invoked. Same fix class as
+# weekly-rollup.py — wiki articles + concept names contain Unicode that cp1252
+# can't encode, so any print() of agent output would crash on Windows console.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
+from config import AGENTS_FILE, CONCEPTS_DIR, CONNECTIONS_DIR, DAILY_DIR, KB_ROOT, KNOWLEDGE_DIR, now_iso
 from utils import (
     file_hash,
     list_raw_files,
@@ -144,6 +153,10 @@ Read the daily log above and compile it into wiki articles following the schema 
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep"],
                 permission_mode="acceptEdits",
+                # KB_ROOT (Obsidian vault) is outside cwd; must be explicitly
+                # allowed or bundled CC's Write/Edit will crash with exit 1.
+                # See weekly-rollup.py for the same fix + history.
+                add_dirs=[str(KB_ROOT)],
                 max_turns=30,
                 max_budget_usd=0.50,
             ),

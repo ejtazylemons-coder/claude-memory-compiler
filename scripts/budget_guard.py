@@ -33,9 +33,12 @@ DISABLED_FLAG = SCRIPTS_DIR / ".compiler-disabled.flag"
 COMBINED_BUDGET_FILE = SCRIPTS_DIR / "combined-budget.json"
 SILENT_ZERO_COUNTER = SCRIPTS_DIR / ".silent-zero-counter.json"
 
-# Hard caps — combined across rollup + compile
-MONTHLY_HARD_CAP_USD = 4.00      # auto-disable above this
-MONTHLY_SOFT_WARN_USD = 3.00     # Telegram nudge but keep running
+# Hard caps — combined across rollup + compile.
+# Sized for steady-state: 7 daily compiles/wk × $0.40 avg + 1 rollup × $0.15
+# = ~$3/week × 4 = ~$12/month plus a 25% buffer. Initial run catches up a
+# multi-week backlog, throttled to 5 files/run by the orchestrator.
+MONTHLY_HARD_CAP_USD = 15.00     # auto-disable above this
+MONTHLY_SOFT_WARN_USD = 10.00    # Telegram nudge but keep running
 MAX_CONSECUTIVE_SILENT_ZEROS = 2  # auto-disable on 2nd in a row
 
 
