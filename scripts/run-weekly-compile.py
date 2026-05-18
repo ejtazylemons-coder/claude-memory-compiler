@@ -45,6 +45,7 @@ BEACON_LOCAL = SCRIPTS_DIR / "weekly-compile.beacon.json"
 BEACON_REMOTE = "/root/hestia/beacons/claude-weekly-compile.json"
 ROLLUP_SCRIPT = SCRIPTS_DIR / "weekly-rollup.py"
 COMPILE_SCRIPT = SCRIPTS_DIR / "compile.py"
+ERRORLOG_SCRIPT = SCRIPTS_DIR / "errorlog-rollup.py"
 VENV_PYTHON = SCRIPTS_DIR.parent / ".venv" / "Scripts" / "python.exe"
 
 
@@ -136,6 +137,7 @@ def main() -> int:
     parser.add_argument("--rollup-only", action="store_true", help="Skip compile phase")
     parser.add_argument("--compile-only", action="store_true", help="Skip rollup phase")
     parser.add_argument("--no-beacon", action="store_true", help="Skip Homebase beacon push")
+    parser.add_argument("--no-errorlog", action="store_true", help="Skip the errorlog-rollup phase")
     args = parser.parse_args()
 
     started_at = _now_iso()
@@ -246,10 +248,25 @@ def main() -> int:
             print(compile_log)
         compile_count_after = len(_list_uncompiled_dailies())
 
+    # ── Phase 3: ErrorLog rollup ───────────────────────────────────────
+    # Synthesizes recurring drift patterns from C:/Obsidian/.../ErrorLog.md
+    # into KB_ROOT/reports/errorlog/YYYY-WW.md. Capped at $0.20/run.
+    errorlog_exit = 0
+    errorlog_attempted = False
+    if not args.no_errorlog:
+        errorlog_attempted = True
+        print(f"\n--- Phase 3: errorlog rollup ---")
+        errorlog_exit, errorlog_log = _run_subprocess(ERRORLOG_SCRIPT)
+        print(errorlog_log)
+        if errorlog_exit != 0:
+            print(f"  errorlog rollup exited {errorlog_exit} (non-fatal — does not block overall_ok)")
+
     # ── Verify + record ────────────────────────────────────────────────
     rollup_ok = args.compile_only or (rollup_exit == 0 and rollup_output_existed)
     compile_ok = args.rollup_only or (compile_exit == 0 and compile_count_after <= compile_count_before)
 
+    # ErrorLog phase is best-effort — failure does NOT flip overall_ok.
+    # Daily lights-out/sync-up already surface drift; weekly synthesis is a bonus.
     overall_ok = rollup_ok and compile_ok
 
     # Compute this-run cost from the budget files. Record cost EVEN ON PARTIAL
@@ -347,6 +364,8 @@ def main() -> int:
             "disabled": budget_guard.is_disabled()[0],
             "rollup_ok": rollup_ok,
             "compile_ok": compile_ok,
+            "errorlog_attempted": errorlog_attempted,
+            "errorlog_ok": errorlog_attempted and errorlog_exit == 0,
             "outputs_written": outputs_written,
             "this_run_cost": round(this_run_cost, 4),
             "monthly_spent": final_budget["spent"],
