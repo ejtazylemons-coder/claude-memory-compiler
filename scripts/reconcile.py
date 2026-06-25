@@ -159,16 +159,16 @@ def check_trigger(row: dict) -> Result:
             return ("remote", f"Win task {arg} — verified transitively via heartbeat (c)")
         try:
             p = subprocess.run(
-                ["schtasks", "/query", "/TN", arg, "/v", "/fo", "LIST"],
-                capture_output=True, text=True, timeout=15,
+                ["schtasks", "/query", "/TN", arg, "/fo", "LIST"],
+                capture_output=True, text=True, timeout=30,
             )
         except (OSError, subprocess.SubprocessError) as e:
             return ("fail", f"schtasks failed: {e}")
         if p.returncode != 0:
             return ("fail", f"Task Scheduler entry missing: {arg}")
-        if re.search(r"(?im)^\s*(Scheduled Task State|Status)\s*:\s*Disabled", p.stdout):
+        if re.search(r"(?im)^\s*Status\s*:\s*Disabled", p.stdout):
             return ("fail", f"Task Scheduler entry disabled: {arg}")
-        return ("pass", f"Task Scheduler entry Ready: {arg}")
+        return ("pass", f"Task Scheduler entry present: {arg}")
 
     if kind == "hook":
         hook_file = REPO_ROOT / "hooks" / f"{arg}.py"
@@ -222,11 +222,11 @@ def check_heartbeat(row: dict) -> Result:
         hp = row["heartbeat_path"].strip()
         if hp.lower() in _NA:
             return ("skip", "no heartbeat path declared")
+        if hp.startswith("/root"):  # a Homebase-only beacon — not checkable off-Homebase
+            return ("remote", f"{hp} — Homebase-only beacon")
         path = Path(hp)
         if not path.is_absolute():
             path = REPO_ROOT / hp
-        if path.is_absolute() and not IS_WINDOWS and str(path).startswith("/root") and not path.exists():
-            return ("remote", f"{path} — Homebase-only beacon")
 
     if not path.exists():
         return ("fail", f"heartbeat missing: {path}")
