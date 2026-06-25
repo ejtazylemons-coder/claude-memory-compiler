@@ -46,4 +46,5 @@ scripts/.silent-zero-counter.json
 scripts/.compiler-disabled.flag
 scripts/weekly-compile.beacon.json
 scripts/memory-dream.beacon.json
+scripts/retrieval-pull.beacon.json
 .codex/
