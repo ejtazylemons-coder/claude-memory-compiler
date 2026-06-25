@@ -103,7 +103,6 @@ A thin **capture → synthesize → retrieve** pipeline where every stage is **s
 ## Status Board
 
 **To Do** *(PIV chunks — each ≈ one block, one commit, each self-proving)*
-- [ ] **Phase 0 — Unfreeze** (pure win, no new arch): register the dead weekly-compile task + run one catch-up compile → wiki gains fresh articles. *(AC4 down payment)*
 - [ ] **Phase 1 — Runtime Registry Reconciliation** (was "Trial Balance"): `REGISTRY.md` + `TOMBSTONE.md` + **Homebase authoritative reconciler** (registry ↔ scheduler/hook triggers ↔ live Ops workers ↔ heartbeats) + laptop pre-commit fast-guard + reconciler registered as Ops critical-slug. *(AC1, AC1b, AC7)*
 - [ ] **Phase 2 — Heartbeats + dead-man's switch**: per-stage tokens (two liveness contracts: scheduled vs event-driven) + in-house Ops beacons + one external switch guarding Ops. *(AC2)*
 - [ ] **Phase 3 — Break-glass gate**: sync-up reads Homebase red/green; blocks on red with reason-string + audited + TTL'd bypass. *(AC3)*
@@ -112,7 +111,7 @@ A thin **capture → synthesize → retrieve** pipeline where every stage is **s
 - [ ] **Chaos drill** registered as monthly Ops worker. *(AC2 ongoing)*
 
 **Doing** *(claimed)*
-- [ ] (none yet — spec revised per Codex r1; ready to build Phase 0)
+- 🔄 **Phase 0 — Unfreeze** — STATUS: 🔄 DOING — Claude (side terminal), 2026-06-25 12:20. Register the unwired weekly-compile task + run one catch-up compile → wiki gains fresh articles. Diagnosed: `run-weekly-rollup.bat` (launcher) + `run-weekly-compile.py` (orchestrator) both exist; only `ClaudeMemoryWeeklyLint` is scheduled — the compile orchestrator was never registered (the exact "replaced/never-wired" failure). 12-file backlog, $0/$15 budget spent. *(AC4 down payment)*
 
 **Done**
 - [x] 4-lens `/diverge` synthesized (2026-06-25)
