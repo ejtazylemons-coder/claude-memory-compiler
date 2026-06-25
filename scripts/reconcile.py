@@ -234,6 +234,12 @@ def check_heartbeat(row: dict) -> Result:
     grace = _grace_hours(row["cadence"])
     if age_h > grace:
         return ("fail", f"stale: {age_h:.1f}h > {grace:.0f}h ({path.name})")
+    # The reconciler's OWN beacon is its verdict file: its exit_code reflects the
+    # fleet's red/green, not the reconciler process's health. Gating the self-row
+    # on that exit_code would lock it permanently red after any single red run
+    # (deadlock). Freshness alone proves the reconciler ran — that is its liveness.
+    if row["ops_slug"].strip() == RECONCILER_SLUG:
+        return ("pass", f"fresh {age_h:.1f}h (self — freshness proves it ran)")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
