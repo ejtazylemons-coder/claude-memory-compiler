@@ -110,8 +110,13 @@ A thin **capture → synthesize → retrieve** pipeline where every stage is **s
 - [ ] **Phase 5 — DEFERRED (Codex r1)**: consolidation (decay+boost+archive) + optional sandboxed LLM abstraction. **Parked until the reliability loop (0–4) survives ≥1 real missed/late cadence + ≥1 chaos drill.** Kept (not cut) — it's the stated "must compound over time" goal, just sequenced after the spine is proven. *(AC6)*
 - [ ] **Chaos drill** registered as monthly Ops worker. *(AC2 ongoing)*
 
-**Doing** *(claimed)*
-- 🔄 **Phase 0 — Unfreeze** — STATUS: 🔄 DOING — Claude (side terminal), 2026-06-25 12:20. Register the unwired weekly-compile task + run one catch-up compile → wiki gains fresh articles. Diagnosed: `run-weekly-rollup.bat` (launcher) + `run-weekly-compile.py` (orchestrator) both exist; only `ClaudeMemoryWeeklyLint` is scheduled — the compile orchestrator was never registered (the exact "replaced/never-wired" failure). 12-file backlog, $0/$15 budget spent. *(AC4 down payment)*
+**Doing** *(claimed — /team build, 3 waves, orchestrated by Claude side-terminal 2026-06-25 12:40)*
+- 🔄 **Phase 0 — Unfreeze** — DOING — worker `spine-phase0` (Wave 1). Compile task already registered (`ClaudeWeeklyCompile` Ready); running catch-up compile + verifying wiki/index growth. *(AC4)*
+- 🔄 **Phase 1 — Runtime Registry Reconciliation** — DOING — worker `spine-phase1-keystone` (Wave 1). REGISTRY/TOMBSTONE + Homebase-authoritative reconciler + pre-commit advisory + Ops critical-slug. *(AC1/AC1b/AC7)*
+- 🔄 **Phase 4 — Wire mem.py pull** — DOING — worker `spine-phase4-pull` (Wave 1). Auto-run BM25 pull in session-start hook (OQ3=auto-run wall). *(AC5)*
+- ⏳ **Phase 2 — Heartbeats + dead-man** — Wave 2 (`spine-phase2-ops`), after Phase 1 contract lands. *(AC2)*
+- ⏳ **Phase 3 — Break-glass gate** — Wave 2 (`spine-phase3-gate`), reads Phase 1 verdict. *(AC3)*
+- ⏳ **Auditor / chaos drill** — Wave 3 (`spine-auditor`): chaos-drill AC1–AC7, confirm Codex's original-death pattern now surfaces RED. *(AC2 ongoing)*
 
 **Done**
 - [x] 4-lens `/diverge` synthesized (2026-06-25)
