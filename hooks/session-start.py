@@ -5,6 +5,9 @@ This is the "context injection" layer. When Claude Code starts a session,
 this hook reads the knowledge base index and recent daily log, then injects
 them as additional context so Claude always "remembers" what it has learned.
 
+Phase 4 (Memory Spine): also auto-runs mem.py BM25 pull-retrieval at session
+start so the retriever is actually consulted, not just available (AC5).
+
 Configure in .claude/settings.json:
 {
     "hooks": {
@@ -16,8 +19,9 @@ Configure in .claude/settings.json:
 }
 """
 
-import hashlib
 import json
+import re
+import socket
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -34,75 +38,104 @@ MAX_LOG_LINES = 30
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = ROOT / "scripts"
-STATE_FILE = SCRIPTS_DIR / "state.json"
-UV = r"C:\Users\Eric\.local\bin\uv.exe"
+MEM_PY = ROOT / "mem.py"
+RETRIEVAL_BEACON = SCRIPTS_DIR / "retrieval-pull.beacon.json"
+
+# Words stripped from daily-log-derived queries so rare, meaningful terms drive BM25
+# (mirrors the STOP set in mem.py, extended with session-log noise words)
+STOP_WORDS = set(
+    "a an the of to in on for and or is are was were be do does did how "
+    "what why when where which who that this it its with my our your you i "
+    "we they he she them me work works working use used using about into "
+    "session today yesterday update status notes log daily".split()
+)
 
 
-def _file_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+def _derive_query() -> str:
+    """Extract query terms from recent daily log headings; fall back to a fixed default.
 
-
-def _has_uncompiled_logs() -> bool:
-    """Return True if any daily log file hasn't been compiled (or has changed since)."""
-    if not DAILY_DIR.exists():
-        return False
-    state: dict = {}
-    if STATE_FILE.exists():
-        try:
-            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-    ingested = state.get("ingested", {})
-    for log_path in sorted(DAILY_DIR.glob("*.md")):
-        prev = ingested.get(log_path.name, {})
-        if not prev or prev.get("hash") != _file_hash(log_path):
-            return True
-    return False
-
-
-def _spawn_compile_if_needed() -> None:
-    """If uncompiled logs exist, spawn compile.py in the background (fire and forget).
-
-    A global lockfile prevents overlapping compiles — critical because compile.py
-    spawns the Claude Agent SDK which racing would cause 'Control request timeout:
-    initialize' errors.
+    Scans the first 20 lines of today's (or yesterday's) daily log for heading
+    lines (# / ## / ###) and pulls meaningful non-stop words from them.  If
+    fewer than 2 useful terms are found the fixed default covers the most common
+    recurring session topics.
     """
-    if not _has_uncompiled_logs():
-        return
-    compile_script = SCRIPTS_DIR / "compile.py"
-    if not compile_script.exists():
-        return
+    today = datetime.now(timezone.utc).astimezone()
+    log_text = ""
+    for offset in range(2):
+        date = today - timedelta(days=offset)
+        log_path = DAILY_DIR / f"{date.strftime('%Y-%m-%d')}.md"
+        if log_path.exists():
+            try:
+                log_text = log_path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                pass
+            break
 
-    # Global compile lock — skip if another compile is running or finished in last 10 min
-    import time
-    lock_path = SCRIPTS_DIR / ".compile-lock.flag"
-    if lock_path.exists():
-        try:
-            age = time.time() - lock_path.stat().st_mtime
-            if age < 600:
-                return
-        except OSError:
-            pass
-    try:
-        lock_path.write_text(str(int(time.time())), encoding="utf-8")
-    except OSError:
-        pass
+    words = []
+    if log_text:
+        for line in log_text.splitlines()[:20]:
+            if line.startswith("#"):
+                clean = re.sub(r"^#+\s*", "", line)
+                for word in re.findall(r"[a-z0-9]+", clean.lower()):
+                    if word not in STOP_WORDS and len(word) > 2:
+                        words.append(word)
+            if len(words) >= 6:
+                break
 
-    cmd = [UV, "run", "--directory", str(ROOT), "python", str(compile_script)]
-    kwargs: dict = {}
-    if sys.platform == "win32":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        kwargs["start_new_session"] = True
+    if len(words) >= 2:
+        return " ".join(words[:6])
+    # fixed default: covers the recurring session topics most likely to surface
+    # relevant wiki pages when the daily log is empty or heading-free
+    return "memory compiler ops harness sync-up workflow"
+
+
+def _run_mem_pull(query: str, n: int = 5):
+    """Run mem.py search <query> -n <n> via stdlib subprocess (zero-token BM25).
+
+    Returns (output_str, n_results, exit_code).  All exceptions are caught so
+    a mem.py failure never blocks session start.
+    """
+    if not MEM_PY.exists():
+        return ("(mem.py not found)", 0, 1)
     try:
-        subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            **kwargs,
+        result = subprocess.run(
+            [sys.executable, str(MEM_PY), "search", query, "-n", str(n)],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            encoding="utf-8",
+            errors="ignore",
+            cwd=str(ROOT),
         )
+        out = result.stdout.strip()
+        # score lines look like "[  4.12] **title**  `path`"
+        n_found = sum(1 for ln in out.splitlines() if re.match(r"^\[\s*[\d]", ln))
+        return (out, n_found, result.returncode)
+    except subprocess.TimeoutExpired:
+        return ("(mem.py search timed out)", 0, 1)
+    except Exception as exc:
+        return (f"(mem.py error: {exc})", 0, 1)
+
+
+def _write_retrieval_beacon(n_pulled: int, exit_code: int) -> None:
+    """Write the retrieval-pull heartbeat token (spine beacon contract).
+
+    Shape matches the other spine beacons so a later reconciler can verify
+    this stage ran: {"name", "machine", "last_run", "exit_code", "summary"}.
+    Silently no-ops on any I/O failure — never blocks session start.
+    """
+    try:
+        beacon = {
+            "name": "retrieval-pull",
+            "machine": socket.gethostname(),
+            "last_run": datetime.now(timezone.utc).isoformat(),
+            "exit_code": exit_code,
+            "summary": f"pulled {n_pulled} pages",
+        }
+        SCRIPTS_DIR.mkdir(exist_ok=True)
+        RETRIEVAL_BEACON.write_text(json.dumps(beacon, indent=2), encoding="utf-8")
     except Exception:
-        pass  # Never block session start due to compile errors
+        pass  # never block session start
 
 
 def get_recent_log() -> str:
@@ -121,7 +154,7 @@ def get_recent_log() -> str:
     return "(no recent daily log)"
 
 
-def build_context() -> str:
+def build_context(pull_output: str = "") -> str:
     """Assemble the context to inject into the conversation."""
     parts = []
 
@@ -140,6 +173,11 @@ def build_context() -> str:
     recent_log = get_recent_log()
     parts.append(f"## Recent Daily Log\n\n{recent_log}")
 
+    # BM25 pull retrieval (Phase 4 — auto-consulted at session start, AC5)
+    # Error strings from _run_mem_pull start with "(" and are not injected as context.
+    if pull_output and not pull_output.startswith("("):
+        parts.append(f"## Memory Pull (BM25)\n\n{pull_output}")
+
     context = "\n\n---\n\n".join(parts)
 
     # Truncate if too long
@@ -150,10 +188,14 @@ def build_context() -> str:
 
 
 def main():
-    # Auto-compile disabled 2026-04-14 — replaced by weekly rollup (scripts/weekly-rollup.py).
-    # Session-end still writes daily logs (free, local). Compilation is now weekly only.
+    # Derive query from today's daily log headings (falls back to fixed default)
+    query = _derive_query()
+    pull_output, n_pulled, pull_exit = _run_mem_pull(query)
+    # Write heartbeat before building context so the token exists even if
+    # context assembly fails for an unrelated reason
+    _write_retrieval_beacon(n_pulled, pull_exit)
 
-    context = build_context()
+    context = build_context(pull_output)
 
     output = {
         "hookSpecificOutput": {
