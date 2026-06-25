@@ -45,6 +45,8 @@ LIVE = Path.home() / ".claude" / "projects" / "C--Dev-workspace" / "memory"
 MIRROR = Path("C:/Dev/workspace/claude-config/memory/C--Dev-workspace")
 INDEX = LIVE / "MEMORY.md"
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
+BEACON_LOCAL = Path(__file__).resolve().parent / "memory-dream.beacon.json"
+BEACON_REMOTE = "/root/hestia/beacons/claude-memory-dream.json"
 
 # ── Tunables ─────────────────────────────────────────────────────────────
 BYTE_BUDGET = 24_400          # the load limit the harness warns at
@@ -199,9 +201,40 @@ def build_report(size, broken, orphans, expired, review, mirror) -> str:
     return "\n".join(L)
 
 
+def _push_beacon(payload: dict) -> None:
+    """Write local beacon + push to Homebase. Best-effort; never changes exit code."""
+    try:
+        BEACON_LOCAL.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        body = json.dumps(payload, separators=(",", ":"))
+        proc = subprocess.Popen(
+            ["ssh", "homebase", f"cat > {BEACON_REMOTE}"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        proc.communicate(input=body.encode("utf-8"), timeout=20)
+    except Exception as e:
+        print(f"[dream] beacon push failed (non-fatal): {type(e).__name__}: {e}")
+
+
+def classify_exit(size, broken, mirror, review) -> tuple[int, str]:
+    """0=clean, 1=integrity fail (broken links / mirror drift), 2=grooming warn."""
+    if broken or mirror:
+        return 1, f"INTEGRITY: {len(broken)} broken links, {len(mirror)} mirror-drift"
+    if size["over_budget"] > 0 or review:
+        return 2, (f"GROOM: MEMORY.md {size['over_budget']:+,}b over budget, "
+                   f"{len(review)} tombstones to review")
+    return 0, "clean"
+
+
 def main():
     ap = argparse.ArgumentParser(description="Local dreaming pass over the memory store.")
     ap.add_argument("--quiet", action="store_true", help="write report only, no console body")
+    ap.add_argument("--beacon", action="store_true", help="push health beacon to Homebase (cron use)")
     args = ap.parse_args()
 
     if not INDEX.exists():
@@ -220,16 +253,39 @@ def main():
     out = REPORTS / f"memory-dream-{today()}.md"
     out.write_text(report, encoding="utf-8")
 
+    exit_code, summary = classify_exit(size, broken, mirror, review)
+
     over = size["over_budget"]
     flag = "OVER" if over > 0 else "ok"
     print(f"[dream] MEMORY.md {size['bytes']:,}b ({flag} by {over:+,}) | "
           f"{len(size['long_lines'])} long lines | {len(broken)} broken | "
           f"{len(orphans)} orphan | {len(expired)} expired | "
           f"{len(review)} review | {len(mirror)} mirror-drift")
+    print(f"[dream] exit={exit_code} {summary}")
     print(f"[dream] report -> {out}")
+
+    if args.beacon:
+        _push_beacon({
+            "name": "ClaudeMemoryDream",
+            "machine": socket.gethostname(),
+            "last_run": now_iso(),
+            "exit_code": exit_code,
+            "summary": summary[:240],
+            "bytes": size["bytes"],
+            "over_budget": over,
+            "long_lines": len(size["long_lines"]),
+            "orphans": len(orphans),
+            "review": len(review),
+            "broken": len(broken),
+            "mirror_drift": len(mirror),
+        })
+
     if not args.quiet:
         print("\n" + report)
-    return 0
+    # Exit non-zero only signals the Ops beacon consumer; for an interactive/
+    # lights-out run we don't want to abort the surrounding script, so the
+    # caller should ignore the code unless --beacon was passed.
+    return exit_code if args.beacon else 0
 
 
 if __name__ == "__main__":

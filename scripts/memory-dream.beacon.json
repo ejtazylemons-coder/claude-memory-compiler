@@ -1,0 +1,14 @@
+{
+  "name": "ClaudeMemoryDream",
+  "machine": "Lola-001",
+  "last_run": "2026-06-24T21:44:38-04:00",
+  "exit_code": 2,
+  "summary": "GROOM: MEMORY.md +3,123b over budget, 4 tombstones to review",
+  "bytes": 27523,
+  "over_budget": 3123,
+  "long_lines": 56,
+  "orphans": 52,
+  "review": 4,
+  "broken": 0,
+  "mirror_drift": 0
+}
