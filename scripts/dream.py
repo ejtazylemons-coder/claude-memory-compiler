@@ -30,13 +30,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import socket
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Paths ────────────────────────────────────────────────────────────────
 LIVE = Path.home() / ".claude" / "projects" / "C--Dev-workspace" / "memory"
-MIRROR = Path("C:/Dev/workspace/claude-config/memory")
+# Mirror is nested per workspace-slug, NOT flat. The flat claude-config/memory/*.md
+# is a stale pre-slug layout (106 files) — comparing against it gives false drift.
+MIRROR = Path("C:/Dev/workspace/claude-config/memory/C--Dev-workspace")
 INDEX = LIVE / "MEMORY.md"
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
 
