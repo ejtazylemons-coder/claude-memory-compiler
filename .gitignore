@@ -45,4 +45,5 @@ scripts/combined-budget.json
 scripts/.silent-zero-counter.json
 scripts/.compiler-disabled.flag
 scripts/weekly-compile.beacon.json
+scripts/memory-dream.beacon.json
 .codex/

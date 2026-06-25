@@ -24,3 +24,11 @@ if ($Result -match 'Results: (\d+) errors, (\d+) warnings, (\d+) suggestions') {
 }
 
 Add-Content $LogFile "[$Timestamp] Lint complete: $Errors errors, $Warnings warnings, $Suggestions suggestions"
+
+# Memory "dreaming" pass — structural consolidation/staleness audit over the
+# ~/.claude memory store (MEMORY.md + feedback_*.md). Free, non-destructive.
+# --beacon pushes health to Homebase for the Ops worker `claude-memory-dream`.
+Add-Content $LogFile "[$Timestamp] Starting memory dream..."
+$DreamResult = & $UvExe run --directory $RepoDir python "$RepoDir\scripts\dream.py" --quiet --beacon 2>&1
+Add-Content $LogFile $DreamResult
+Add-Content $LogFile "[$Timestamp] Memory dream complete."
