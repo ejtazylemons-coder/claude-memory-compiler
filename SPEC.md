@@ -102,26 +102,20 @@ A thin **capture → synthesize → retrieve** pipeline where every stage is **s
 
 ## Status Board
 
-**To Do** *(PIV chunks — each ≈ one block, one commit, each self-proving)*
-- [ ] **Phase 1 — Runtime Registry Reconciliation** (was "Trial Balance"): `REGISTRY.md` + `TOMBSTONE.md` + **Homebase authoritative reconciler** (registry ↔ scheduler/hook triggers ↔ live Ops workers ↔ heartbeats) + laptop pre-commit fast-guard + reconciler registered as Ops critical-slug. *(AC1, AC1b, AC7)*
-- [ ] **Phase 2 — Heartbeats + dead-man's switch**: per-stage tokens (two liveness contracts: scheduled vs event-driven) + in-house Ops beacons + one external switch guarding Ops. *(AC2)*
-- [ ] **Phase 3 — Break-glass gate**: sync-up reads Homebase red/green; blocks on red with reason-string + audited + TTL'd bypass. *(AC3)*
-- [ ] **Phase 4 — Wire mem.py pull into sync-up**: auto-consulted at session start. *(AC5)*
-- [ ] **Phase 5 — DEFERRED (Codex r1)**: consolidation (decay+boost+archive) + optional sandboxed LLM abstraction. **Parked until the reliability loop (0–4) survives ≥1 real missed/late cadence + ≥1 chaos drill.** Kept (not cut) — it's the stated "must compound over time" goal, just sequenced after the spine is proven. *(AC6)*
-- [ ] **Chaos drill** registered as monthly Ops worker. *(AC2 ongoing)*
+**To Do**
+- [ ] **Phase 5 — DEFERRED (Codex r1)**: consolidation (decay+boost+archive) + optional sandboxed LLM abstraction. **Parked until the reliability loop (0–4) survives ≥1 real missed/late cadence + ≥1 chaos drill.** *(AC6)*
 
-**Doing** *(claimed — /team build, 3 waves, orchestrated by Claude side-terminal 2026-06-25 12:40)*
-- 🔄 **Phase 0 — Unfreeze** — DOING — worker `spine-phase0` (Wave 1). Compile task already registered (`ClaudeWeeklyCompile` Ready); running catch-up compile + verifying wiki/index growth. *(AC4)*
-- 🔄 **Phase 1 — Runtime Registry Reconciliation** — DOING — worker `spine-phase1-keystone` (Wave 1). REGISTRY/TOMBSTONE + Homebase-authoritative reconciler + pre-commit advisory + Ops critical-slug. *(AC1/AC1b/AC7)*
-- 🔄 **Phase 4 — Wire mem.py pull** — DOING — worker `spine-phase4-pull` (Wave 1). Auto-run BM25 pull in session-start hook (OQ3=auto-run wall). *(AC5)*
-- ⏳ **Phase 2 — Heartbeats + dead-man** — Wave 2 (`spine-phase2-ops`), after Phase 1 contract lands. *(AC2)*
-- ⏳ **Phase 3 — Break-glass gate** — Wave 2 (`spine-phase3-gate`), reads Phase 1 verdict. *(AC3)*
-- ⏳ **Auditor / chaos drill** — Wave 3 (`spine-auditor`): chaos-drill AC1–AC7, confirm Codex's original-death pattern now surfaces RED. *(AC2 ongoing)*
+**Doing** *(claimed — /team build, 3 waves, orchestrated by Claude side-terminal 2026-06-25→26)*
+- 🔄 **Green production run + Auditor (Wave 3)** — running full `run-weekly-compile.py` (now that compile-fix landed) to write compile beacon `exit_code=0` → flips reconciler's last 2 red checks → verdict GREEN; then `spine-auditor` chaos-drills AC1–AC7 + confirms Codex's original-death pattern surfaces RED. *(AC2 ongoing)*
 
-**Done**
-- [x] 4-lens `/diverge` synthesized (2026-06-25)
-- [x] Spec scaffolded
-- [x] Codex dual-brain cold-read (r1) — keystone flaw caught + spec revised, converged (`final.md`)
+**Done** *(build complete — all 6 workers reported DONE)*
+- [x] 4-lens `/diverge` synthesized + spec scaffolded + Codex dual-brain r1 (converged)
+- [x] **Phase 0 — Unfreeze** — `ClaudeWeeklyCompile` task registered; compile-fix landed (see below); verification compile wrote 4 articles (concepts 31→35). *(AC4)*
+- [x] **Phase 1 — Runtime Registry Reconciliation** (keystone) — `REGISTRY.md`+`TOMBSTONE.md`+`scripts/reconcile.py` (Homebase-authoritative, deployed, daily) + pre-commit advisory + Ops critical-slug. Reconciler correctly RED on real death. Commit `8ca316f`. *(AC1/AC1b/AC7)*
+- [x] **Phase 2 — Heartbeats + dead-man** — un-archived `claude-weekly-compile.yaml`, created `claude-memory-reconciler.yaml`, watchdog critical slugs (`claude-memory-reconciler`,`claude-weekly-compile`) deployed live, shared `heartbeat.py` emitter, healthchecks.io dead-man STUBBED (needs Mr.TL UUID). Commits `f66fa12`,`bdde911`. *(AC2/AC1b)*
+- [x] **Phase 3 — Break-glass gate** — `scripts/break_glass.py` + session-start gate: blocks on red+reachable, reason+audit+TTL bypass, graceful degrade on unreachable. Proven against real verdict. Commit `e3bc01b`. *(AC3)*
+- [x] **Phase 4 — Wire mem.py pull** — auto-run BM25 pull in session-start (OQ3=auto-run wall) + dead compile-call removed w/ tombstone ref. Commit `18479d8`. *(AC5)*
+- [x] **compile-fix** — nested SDK exit-1 fixed (2 causes: hook inheritance + `max_budget_usd` too low). `--setting-sources ""` + budget 0.50→1.50, subscription preserved. Commit `ff47612`. *(unblocks AC4)*
 
 ## Decisions (ADR log)
 
