@@ -159,6 +159,16 @@ Read the daily log above and compile it into wiki articles following the schema 
                 add_dirs=[str(KB_ROOT)],
                 max_turns=30,
                 max_budget_usd=0.50,
+                # Settings-source isolation: this nested batch session must NOT
+                # load the user's ~/.claude/settings.json NOR the repo's project
+                # .claude/settings.json. Both register SessionEnd hooks that fail
+                # ("Hook cancelled") in the nested SDK subprocess, making the
+                # inner CLI exit 1 even though the compile work succeeded — which
+                # left the wiki frozen (Phase 0). Emitting `--setting-sources ""`
+                # loads no user/project/local settings, so no hooks fire. Auth
+                # comes from credentials, not settings.json, so subscription
+                # billing is unaffected.
+                extra_args={"setting-sources": ""},
             ),
         ):
             if isinstance(message, AssistantMessage):

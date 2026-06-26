@@ -162,6 +162,13 @@ Rules:
                 allowed_tools=[],
                 max_turns=2,
                 max_budget_usd=cap,
+                # Settings-source isolation: don't load the user's or the repo's
+                # .claude/settings.json in this nested batch session. Their
+                # SessionEnd hooks fail ("Hook cancelled") in the SDK subprocess
+                # and can make the inner CLI exit 1. `--setting-sources ""` loads
+                # no settings, so no hooks fire. Auth is unaffected (it lives in
+                # credentials, not settings.json). Same fix as compile.py.
+                extra_args={"setting-sources": ""},
             ),
         ):
             if isinstance(message, ResultMessage):
