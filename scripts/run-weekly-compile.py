@@ -248,6 +248,24 @@ def main() -> int:
             print(compile_log)
         compile_count_after = len(_list_uncompiled_dailies())
 
+    # Count files actually compiled THIS run from state.json (compiled_at within
+    # this run's window). This is the honest "did work happen" signal: compile.py
+    # selects oldest-first across the ALL-TIME backlog, so the 14-day backlog delta
+    # (compile_count_before/after) can stay flat even when 5 files were just
+    # compiled — a false silent-zero (cry-wolf). Ingested-delta avoids that while
+    # still catching a TRUE no-op (the 2026-04-14 death: SDK crashed, nothing
+    # marked ingested, zero articles).
+    compiled_this_run = 0
+    _state_path_early = SCRIPTS_DIR / "state.json"
+    if not args.rollup_only and _state_path_early.exists():
+        try:
+            _st_early = json.loads(_state_path_early.read_text(encoding="utf-8"))
+            for _e in _st_early.get("ingested", {}).values():
+                if _e.get("compiled_at", "") >= started_at[:13]:
+                    compiled_this_run += 1
+        except (json.JSONDecodeError, OSError):
+            pass
+
     # ── Phase 3: ErrorLog rollup ───────────────────────────────────────
     # Synthesizes recurring drift patterns from C:/Obsidian/.../ErrorLog.md
     # into KB_ROOT/reports/errorlog/YYYY-WW.md. Capped at $0.20/run.
@@ -263,7 +281,7 @@ def main() -> int:
 
     # ── Verify + record ────────────────────────────────────────────────
     rollup_ok = args.compile_only or (rollup_exit == 0 and rollup_output_existed)
-    compile_ok = args.rollup_only or (compile_exit == 0 and compile_count_after <= compile_count_before)
+    compile_ok = args.rollup_only or (compile_exit == 0 and (compiled_this_run > 0 or compile_count_before == 0))
 
     # ErrorLog phase is best-effort — failure does NOT flip overall_ok.
     # Daily lights-out/sync-up already surface drift; weekly synthesis is a bonus.
@@ -305,7 +323,7 @@ def main() -> int:
     if not args.compile_only and rollup_exit == 0 and not rollup_output_existed:
         silent_zero_detected = True
         print("WARN: rollup exited 0 but output file was not created — silent failure")
-    if not args.rollup_only and compile_exit == 0 and compile_count_before > 0 and compile_count_after == compile_count_before:
+    if not args.rollup_only and compile_exit == 0 and compile_count_before > 0 and compiled_this_run == 0:
         silent_zero_detected = True
         print("WARN: compile exited 0 but no daily files were ingested — silent failure")
 
