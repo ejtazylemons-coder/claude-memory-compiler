@@ -158,7 +158,15 @@ Read the daily log above and compile it into wiki articles following the schema 
                 # See weekly-rollup.py for the same fix + history.
                 add_dirs=[str(KB_ROOT)],
                 max_turns=30,
-                max_budget_usd=0.50,
+                # Per-file safety ceiling. A real compile of a content-rich daily
+                # log costs ~$0.3–0.6; the old $0.50 cap was BELOW typical cost, so
+                # the CLI hit the ceiling (ResultMessage subtype=error_max_budget_usd)
+                # and exited 1 mid-task even though articles were written — a second
+                # cause of the Phase 0 exit-1 (alongside the hook issue below). Raise
+                # to give normal compiles headroom to finish naturally and exit 0.
+                # This stays a runaway guard; the orchestrator enforces the monthly
+                # spend cap, so a rarely-hit per-file ceiling is the right place for it.
+                max_budget_usd=1.50,
                 # Settings-source isolation: this nested batch session must NOT
                 # load the user's ~/.claude/settings.json NOR the repo's project
                 # .claude/settings.json. Both register SessionEnd hooks that fail
