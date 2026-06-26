@@ -47,4 +47,7 @@ scripts/.compiler-disabled.flag
 scripts/weekly-compile.beacon.json
 scripts/memory-dream.beacon.json
 scripts/retrieval-pull.beacon.json
+scripts/verdict-cache.json
+scripts/break-glass-audit.jsonl
+scripts/break-glass-token.json
 .codex/

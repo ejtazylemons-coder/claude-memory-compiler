@@ -8,6 +8,11 @@ them as additional context so Claude always "remembers" what it has learned.
 Phase 4 (Memory Spine): also auto-runs mem.py BM25 pull-retrieval at session
 start so the retriever is actually consulted, not just available (AC5).
 
+Phase 3 (Memory Spine): reads the Homebase authoritative red/green verdict and,
+when RED + reachable with no live break-glass token, prepends a loud BLOCKING
+banner (failing checks + the exact break-glass command) to the injected context.
+Graceful degrade: an unreachable Homebase never blocks (AC3, spec §4.2.6).
+
 Configure in .claude/settings.json:
 {
     "hooks": {
@@ -138,6 +143,35 @@ def _write_retrieval_beacon(n_pulled: int, exit_code: int) -> None:
         pass  # never block session start
 
 
+def _gate_banner() -> str:
+    """Phase 3 break-glass gate: read Homebase's authoritative verdict and decide.
+
+    Returns a banner string to prepend to the injected context:
+      - BLOCK  (RED + reachable, no live token): loud wall + failing checks + the
+        exact break-glass command.
+      - WARN   (operating under break-glass, OR Homebase unreachable): a notice,
+        but session proceeds (laptop-off != stage-dead, spec §4.2.6).
+      - ALLOW  (green): empty string.
+
+    Never raises — a broken gate must not crash session start (the gate degrades,
+    it does not trap Mr.TL).
+    """
+    try:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        import break_glass
+
+        decision = break_glass.gate_decision()
+    except Exception:
+        return ""  # gate failure never blocks session start
+
+    if decision["decision"] == "block":
+        return break_glass.render_block_message(decision).strip()
+    if decision["decision"] == "warn":
+        return f"## Memory Spine — WARN\n\n{decision['message']}"
+    return ""  # allow: stay quiet on green
+
+
 def get_recent_log() -> str:
     """Read the most recent daily log (today or yesterday)."""
     today = datetime.now(timezone.utc).astimezone()
@@ -154,9 +188,14 @@ def get_recent_log() -> str:
     return "(no recent daily log)"
 
 
-def build_context(pull_output: str = "") -> str:
+def build_context(pull_output: str = "", gate_banner: str = "") -> str:
     """Assemble the context to inject into the conversation."""
     parts = []
+
+    # Phase 3 break-glass gate banner (block/warn) goes FIRST so it survives the
+    # tail-truncation below and lands at the top of the injected context.
+    if gate_banner:
+        parts.append(gate_banner)
 
     # Today's date
     today = datetime.now(timezone.utc).astimezone()
@@ -195,7 +234,10 @@ def main():
     # context assembly fails for an unrelated reason
     _write_retrieval_beacon(n_pulled, pull_exit)
 
-    context = build_context(pull_output)
+    # Phase 3: read Homebase's authoritative red/green verdict and gate.
+    gate_banner = _gate_banner()
+
+    context = build_context(pull_output, gate_banner)
 
     output = {
         "hookSpecificOutput": {
