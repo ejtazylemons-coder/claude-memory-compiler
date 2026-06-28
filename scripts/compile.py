@@ -58,18 +58,14 @@ async def compile_daily_log(log_path: Path, state: dict) -> float:
     schema = AGENTS_FILE.read_text(encoding="utf-8")
     wiki_index = read_wiki_index()
 
-    # Read existing articles for context
-    existing_articles_context = ""
-    existing = {}
-    for article_path in list_wiki_articles():
-        rel = article_path.relative_to(KNOWLEDGE_DIR)
-        existing[str(rel)] = article_path.read_text(encoding="utf-8")
-
-    if existing:
-        parts = []
-        for rel_path, content in existing.items():
-            parts.append(f"### {rel_path}\n```markdown\n{content}\n```")
-        existing_articles_context = "\n\n".join(parts)
+    # Count existing articles for context. We deliberately do NOT embed their full
+    # text: at ~63 articles that was ~90K tokens (~360KB) in EVERY prompt, which
+    # overflowed the CLI's message reader and crashed compilation with "exit code
+    # 143" (it grew O(n) with the wiki and broke once the wiki passed ~50 articles).
+    # The agent has Read/Glob/Grep + add_dirs=KB_ROOT and the wiki index below, so it
+    # reads the specific articles it needs to update/link on demand — constant-size
+    # prompt that scales no matter how large the wiki grows.
+    existing_article_count = len(list_wiki_articles())
 
     timestamp = now_iso()
 
@@ -86,7 +82,7 @@ and extract knowledge into structured wiki articles.
 
 ## Existing Wiki Articles
 
-{existing_articles_context if existing_articles_context else "(No existing articles yet)"}
+There are {existing_article_count} existing articles — see the **Current Wiki Index** above for the full catalog (titles + summaries). They live in `knowledge/concepts/` and `knowledge/connections/` (inside your working dirs). When you need to UPDATE or LINK to an existing article, use Read/Glob/Grep to inspect that specific file first — do not assume its contents.
 
 ## Daily Log to Compile
 
