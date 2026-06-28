@@ -38,6 +38,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Windows consoles default to cp1252; the memory store is UTF-8 (arrows, em-dashes,
+# emoji). Make console output encoding-robust so a non-cp1252 char in MEMORY.md can
+# never crash the auditor. The report file is always written UTF-8 regardless.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass
+
 # ── Paths ────────────────────────────────────────────────────────────────
 LIVE = Path.home() / ".claude" / "projects" / "C--Dev-workspace" / "memory"
 # Mirror is nested per workspace-slug, NOT flat. The flat claude-config/memory/*.md
@@ -226,8 +235,12 @@ def classify_exit(size, broken, mirror, review) -> tuple[int, str]:
     if broken or mirror:
         return 1, f"INTEGRITY: {len(broken)} broken links, {len(mirror)} mirror-drift"
     if size["over_budget"] > 0 or review:
-        return 2, (f"GROOM: MEMORY.md {size['over_budget']:+,}b over budget, "
-                   f"{len(review)} tombstones to review")
+        parts = []
+        if size["over_budget"] > 0:
+            parts.append(f"MEMORY.md {size['over_budget']:+,}b over budget")
+        if review:
+            parts.append(f"{len(review)} tombstones to review")
+        return 2, "GROOM: " + ", ".join(parts)
     return 0, "clean"
 
 
