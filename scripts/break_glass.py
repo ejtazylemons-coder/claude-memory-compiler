@@ -29,6 +29,7 @@ Stdlib only.
 
 import argparse
 import json
+import shlex
 import socket
 import subprocess
 import sys
@@ -70,8 +71,8 @@ def fetch_verdict(verdict_remote: str = VERDICT_REMOTE):
     creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     try:
         result = subprocess.run(
-            ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
-             SSH_HOST, f"cat {verdict_remote}"],
+            ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+             SSH_HOST, f"cat {shlex.quote(verdict_remote)}"],
             capture_output=True,
             text=True,
             timeout=10,

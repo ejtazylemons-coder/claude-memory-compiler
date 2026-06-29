@@ -1,7 +1,7 @@
 # Memory Spine — Spec
 
-> **Status:** Active (revised per Codex r1, converged) · **Type:** Spec (solo / internal tooling)
-> **Created:** 2026-06-25 · **Updated:** 2026-06-25 · **Owner:** Mr.TL
+> **Status:** Reliability loop (Phases 0–4) DONE + chaos-verified 2026-06-29; Phase 5 (consolidation) deferred · **Type:** Spec (solo / internal tooling)
+> **Created:** 2026-06-25 · **Updated:** 2026-06-29 · **Owner:** Mr.TL
 > **Spec vs PRD:** solo/internal non-trivial → one Spec (this doc). Synthesizes a 4-lens `/diverge` (2026-06-25) + Codex dual-brain cold-read (`C:\Dev\codex\dual_brain\requests\2026-06-25_1040_memory-spine-spec-coldread-r1\`). Ready to build Phases 0–4.
 
 ---
@@ -105,8 +105,17 @@ A thin **capture → synthesize → retrieve** pipeline where every stage is **s
 **To Do**
 - [ ] **Phase 5 — DEFERRED (Codex r1)**: consolidation (decay+boost+archive) + optional sandboxed LLM abstraction. **Parked until the reliability loop (0–4) survives ≥1 real missed/late cadence + ≥1 chaos drill.** *(AC6)*
 
-**Doing** *(claimed — /team build, 3 waves, orchestrated by Claude side-terminal 2026-06-25→26)*
-- 🔄 **Green production run + Auditor (Wave 3)** — running full `run-weekly-compile.py` (now that compile-fix landed) to write compile beacon `exit_code=0` → flips reconciler's last 2 red checks → verdict GREEN; then `spine-auditor` chaos-drills AC1–AC7 + confirms Codex's original-death pattern surfaces RED. *(AC2 ongoing)*
+**Done** *(reliability loop Phases 0–4 built AND chaos-verified — 2026-06-29)*
+- [x] **Verification tail COMPLETE 2026-06-29** — reconciler GREEN baseline (5 rows, exit 0); all in-scope ACs chaos-tested live on Homebase (every drill redirected to a temp verdict path so the real beacon stayed GREEN throughout):
+  - **AC1** ✅ archived a live worker → reconciler RED on **(b)** *and* **(d)** — reproduced the exact 2026-04-14 silent-death pattern (unwired replacement) the keystone was built to catch; restored → GREEN.
+  - **AC1(c)/AC2** ✅ yanked a heartbeat → RED on (c); restored (mtime preserved) → GREEN.
+  - **AC1b** ✅ both spine slugs confirmed in the live `WATCHDOG_CRITICAL_SLUGS`; a reconciler-disabled meta fires the real "Ops CRITICAL worker not monitored" alert (detection exercised end-to-end; Telegram **send** deliberately NOT invoked — avoid re-spamming Mr.TL after the 06-29 storm).
+  - **AC3** ✅ RED+reachable → **BLOCK**; reasoned break-glass → audited token (24h TTL); RED+token → **WARN, still red** (never clears); token cleaned up, gate back to GREEN/ALLOW.
+  - **AC4** ✅ compile beacon exit 0; wiki concepts 31→**76**; BM25 index covers 77 pages.
+  - **AC5** ✅ mem.py BM25 pull auto-runs at session start; retrieval beacon written this session ("pulled 5 pages", exit 0).
+  - **AC7** ✅ all 5 stages registered with live heartbeats (GREEN verdict).
+  - **AC6** = Phase 5 (consolidation) → still deferred (below).
+- [x] **`/security-review` PASSED 2026-06-29** (reviewer agent) — APPROVED 8/10, "safe to declare done": no `shell=True`, no committed secrets, break-glass properly TTL-bounded + reason-required + audited, runtime-state files gitignored. 3 cheap hardening items found AND FIXED in-session: `shlex.quote()` on the two SSH remote-command f-strings (`heartbeat.py`/`break_glass.py`), un-tracked `memory-dream.beacon.json`. Plus self-found robustness fix: `break_glass` `ConnectTimeout 5→10s` (cold-ssh false-"unreachable" momentarily weakened the AC3 wall on first session-start after idle; degrade is fail-safe so never trapped, but the bump tightens the wall).
 
 **Done** *(build complete — all 6 workers reported DONE)*
 - [x] 4-lens `/diverge` synthesized + spec scaffolded + Codex dual-brain r1 (converged)

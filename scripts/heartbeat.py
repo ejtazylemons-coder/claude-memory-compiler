@@ -37,6 +37,7 @@ Which stages should adopt this helper (once they own their beacon writes):
 from __future__ import annotations
 
 import json
+import shlex
 import socket
 import subprocess
 import sys
@@ -98,7 +99,7 @@ def emit(
     try:
         body = json.dumps(payload, separators=(",", ":"))
         proc = subprocess.Popen(
-            ["ssh", "homebase", f"cat > {remote_path}"],
+            ["ssh", "homebase", f"cat > {shlex.quote(remote_path)}"],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
