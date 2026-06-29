@@ -168,7 +168,11 @@ def assemble_input_blob(month_label: str) -> tuple[str, dict]:
         for log in daily_logs:
             combined.append(f"### {log.stem}\n\n{log.read_text(encoding='utf-8')}")
         body = "\n\n---\n\n".join(combined)
-        sections.append(f"## Daily logs for {month_label}\n\n{truncate(body, 200000, 'daily logs')}")
+        # Caps kept conservative so the SUM of all sections (logs+memory+handoffs+
+        # state) stays well under the ~250KB point where the claude CLI message reader
+        # overflows and crashes with exit 143 (the O(n) prompt-bloat bug fixed in
+        # compile.py). A heavy month would otherwise sum past that ceiling.
+        sections.append(f"## Daily logs for {month_label}\n\n{truncate(body, 120000, 'daily logs')}")
 
     if memory_files:
         combined = []
@@ -178,7 +182,7 @@ def assemble_input_blob(month_label: str) -> tuple[str, dict]:
             except OSError:
                 continue
         body = "\n\n---\n\n".join(combined)
-        sections.append(f"## Memory files modified in {month_label}\n\n{truncate(body, 80000, 'memory files')}")
+        sections.append(f"## Memory files modified in {month_label}\n\n{truncate(body, 50000, 'memory files')}")
 
     if decisions:
         lines = ["| Date | Decision | Reasoning | Expected | Status |", "|---|---|---|---|---|"]
@@ -198,7 +202,7 @@ def assemble_input_blob(month_label: str) -> tuple[str, dict]:
             except OSError:
                 continue
         body = "\n\n---\n\n".join(combined)
-        sections.append(f"## Recent handoff notes (last {len(handoffs)})\n\n{truncate(body, 40000, 'handoffs')}")
+        sections.append(f"## Recent handoff notes (last {len(handoffs)})\n\n{truncate(body, 25000, 'handoffs')}")
 
     counts = {
         "daily_logs": len(daily_logs),

@@ -156,6 +156,16 @@ async def check_contradictions() -> list[dict]:
     )
 
     wiki_content = read_all_wiki_content()
+    # Bound the embedded corpus. At ~63 articles the full wiki text was ~360KB, which
+    # overflows the claude CLI message reader and crashes the run with exit 143 — the
+    # same O(n) prompt-bloat bug fixed in compile.py. This check (unlike compile, which
+    # writes files via tools) genuinely needs broad context, so we cap rather than
+    # tool-ify: scan a bounded window and flag partial coverage. The high-value
+    # STRUCTURAL checks above are unaffected and always run.
+    _CONTRA_CAP = 60_000
+    _contra_truncated = len(wiki_content) > _CONTRA_CAP
+    if _contra_truncated:
+        wiki_content = wiki_content[:_CONTRA_CAP] + "\n\n...(wiki truncated here for prompt-size safety)"
 
     prompt = f"""Review this knowledge base for contradictions, inconsistencies, or
 conflicting claims across articles.
@@ -194,7 +204,12 @@ Do NOT output anything else - no preamble, no explanation, just the formatted li
                     if isinstance(block, TextBlock):
                         response += block.text
     except Exception as e:
-        return [{"severity": "error", "check": "contradiction", "file": "(system)", "detail": f"LLM check failed: {e}"}]
+        # Downgraded error -> warning: the LLM contradiction check is the fragile,
+        # low-value part of lint (single-prompt corpus embed; degrades as the wiki
+        # grows). A transient SDK failure here must NOT escalate the whole lint run to
+        # "errors found" and trip an Ops alert — the high-value structural checks above
+        # are independent and authoritative. See reference_compile_nested_sdk_hang.
+        return [{"severity": "warning", "check": "contradiction", "file": "(system)", "detail": f"LLM contradiction check skipped (best-effort): {e}"}]
 
     issues = []
     if "NO_ISSUES" not in response:
@@ -207,6 +222,14 @@ Do NOT output anything else - no preamble, no explanation, just the formatted li
                     "file": "(cross-article)",
                     "detail": line,
                 })
+
+    if _contra_truncated:
+        issues.append({
+            "severity": "info",
+            "check": "contradiction",
+            "file": "(coverage)",
+            "detail": f"Wiki exceeded {_CONTRA_CAP:,} chars; contradiction scan covered a bounded window only. Full-coverage detection needs a batched/tool-based pass.",
+        })
 
     return issues
 
