@@ -234,13 +234,15 @@ def classify_exit(size, broken, mirror, review) -> tuple[int, str]:
     """0=clean, 1=integrity fail (broken links / mirror drift), 2=grooming warn."""
     if broken or mirror:
         return 1, f"INTEGRITY: {len(broken)} broken links, {len(mirror)} mirror-drift"
-    if size["over_budget"] > 0 or review:
-        parts = []
-        if size["over_budget"] > 0:
-            parts.append(f"MEMORY.md {size['over_budget']:+,}b over budget")
-        if review:
-            parts.append(f"{len(review)} tombstones to review")
-        return 2, "GROOM: " + ", ".join(parts)
+    # Only an ACTIONABLE size problem warns Ops (exit 2). Tombstone-review is a soft
+    # advisory — a few index lines carry retirement keywords (esp. dense grouped lines
+    # where one link's hook mentions a deprecated path). It's listed in the report for
+    # the human to glance at, but must NOT escalate to a weekly Ops warn/alert. Broken
+    # links + mirror drift remain the hard failures (exit 1, handled above).
+    if size["over_budget"] > 0:
+        return 2, f"GROOM: MEMORY.md {size['over_budget']:+,}b over budget"
+    if review:
+        return 0, f"clean ({len(review)} tombstones noted — advisory, no action needed)"
     return 0, "clean"
 
 
