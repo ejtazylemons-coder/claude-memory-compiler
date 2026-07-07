@@ -140,6 +140,22 @@ Read the daily log above and compile it into wiki articles following the schema 
     # Don't swallow exceptions silently — see weekly-rollup.py for the same fix.
     # Caller (run-weekly-compile.py) must distinguish $0 cost from $0 cost + raise.
     error_raised: BaseException | None = None
+
+    # STDERR DRAIN — load-bearing, do not remove. The SDK only pipes the nested
+    # CLI's stderr when a `stderr` callback is set (subprocess_cli.py: `should_pipe_stderr
+    # = options.stderr is not None`). With NO callback, stderr is left inherited/
+    # uncontrolled and this tool-heavy claude_code-preset session DEADLOCKS mid-run
+    # (reproduced 2026-07-07: identical prompt+options hung indefinitely → exit 143
+    # on kill; adding this drain = clean 45s exit). The bare-text rollup/errorlog
+    # queries (allowed_tools=[]) emit too little stderr to hit it, which is why only
+    # compile hung. The callback also captures the tail so a future failure is
+    # visible instead of silent (the 2026-06-28 "surface hidden stderr" lesson).
+    stderr_tail: list[str] = []
+    def _drain_stderr(line: str) -> None:
+        stderr_tail.append(line)
+        if len(stderr_tail) > 50:
+            del stderr_tail[0]
+
     try:
         async for message in query(
             prompt=prompt,
@@ -149,6 +165,7 @@ Read the daily log above and compile it into wiki articles following the schema 
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep"],
                 permission_mode="acceptEdits",
+                stderr=_drain_stderr,
                 # KB_ROOT (Obsidian vault) is outside cwd; must be explicitly
                 # allowed or bundled CC's Write/Edit will crash with exit 1.
                 # See weekly-rollup.py for the same fix + history.
@@ -185,6 +202,10 @@ Read the daily log above and compile it into wiki articles following the schema 
     except Exception as e:
         error_raised = e
         print(f"  Error: {type(e).__name__}: {e}")
+        if stderr_tail:
+            print("  --- nested CLI stderr (last lines) ---")
+            for _l in stderr_tail[-20:]:
+                print(f"  | {_l}")
 
     # Only record state if the compile didn't raise. A bare $0 cost (with no
     # exception) still updates state — the LLM may have legitimately decided

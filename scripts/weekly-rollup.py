@@ -162,6 +162,12 @@ Rules:
                 allowed_tools=[],
                 max_turns=2,
                 max_budget_usd=cap,
+                # Defensive stderr drain — the SDK only pipes+drains the nested CLI's
+                # stderr when a callback is set; without one it is left inherited and
+                # can deadlock (see compile.py 2026-07-07 root cause). This bare-text
+                # query emits little stderr so it has not hit it, but draining is
+                # zero-risk insurance against that failure mode.
+                stderr=lambda _l: None,
                 # Settings-source isolation: don't load the user's or the repo's
                 # .claude/settings.json in this nested batch session. Their
                 # SessionEnd hooks fail ("Hook cancelled") in the SDK subprocess
