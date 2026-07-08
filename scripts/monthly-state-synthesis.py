@@ -279,6 +279,19 @@ async def run_synthesis(prompt: str, output_path: Path, remaining_budget: float)
 
     cap = min(PER_RUN_CAP_USD, remaining_budget)
     cost = 0.0
+
+    # STDERR DRAIN — load-bearing, do not remove. The SDK only pipes the nested
+    # CLI's stderr when a `stderr` callback is set (subprocess_cli.py:
+    # `should_pipe_stderr = options.stderr is not None`). With NO callback, a
+    # tool-heavy claude_code-preset session can DEADLOCK mid-run → exit 143 on
+    # kill (root-caused in compile.py 2026-07-07). This enables Write, so it
+    # carries the same signature.
+    stderr_tail: list[str] = []
+    def _drain_stderr(line: str) -> None:
+        stderr_tail.append(line)
+        if len(stderr_tail) > 50:
+            del stderr_tail[0]
+
     try:
         async for message in query(
             prompt=prompt,
@@ -288,6 +301,7 @@ async def run_synthesis(prompt: str, output_path: Path, remaining_budget: float)
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 allowed_tools=["Write"],
                 permission_mode="acceptEdits",
+                stderr=_drain_stderr,
                 max_turns=5,
                 max_budget_usd=cap,
             ),

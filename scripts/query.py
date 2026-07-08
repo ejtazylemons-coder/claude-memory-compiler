@@ -82,6 +82,18 @@ consulting the knowledge base below.
     answer = ""
     cost = 0.0
 
+    # STDERR DRAIN — load-bearing, do not remove. The SDK only pipes the nested
+    # CLI's stderr when a `stderr` callback is set (subprocess_cli.py:
+    # `should_pipe_stderr = options.stderr is not None`). With NO callback, a
+    # tool-heavy claude_code-preset session can DEADLOCK mid-run → exit 143 on
+    # kill (root-caused in compile.py 2026-07-07). This path enables Read/Glob/
+    # Grep (+Write/Edit when --file-back), so it carries the same signature.
+    stderr_tail: list[str] = []
+    def _drain_stderr(line: str) -> None:
+        stderr_tail.append(line)
+        if len(stderr_tail) > 50:
+            del stderr_tail[0]
+
     try:
         async for message in query(
             prompt=prompt,
@@ -90,6 +102,7 @@ consulting the knowledge base below.
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 allowed_tools=tools,
                 permission_mode="acceptEdits",
+                stderr=_drain_stderr,
                 max_turns=15,
             ),
         ):
