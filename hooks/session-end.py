@@ -202,6 +202,14 @@ def main() -> None:
         logging.warning("Could not write dedup lock: %s", e)
 
     if not transcript_path_str or not isinstance(transcript_path_str, str):
+        if source in ("boot-catchup-kick", "manual-triage"):
+            # Boot catch-up path (2026-07-27 fix): no session to flush, but the pipeline
+            # itself just ran end-to-end — publish an honest liveness ping so a laptop-off
+            # weekend doesn't leave the Ops beacon stale. Before this, the early return
+            # meant boot-catchup-kick step 3 could never heal the beacon at all.
+            logging.info("Catch-up ping (source=%s): no transcript, publishing beacon only", source)
+            publish_beacon(f"catchup-{source}", 0, 0)
+            return
         logging.info("SKIP: no transcript path")
         return
 
@@ -282,7 +290,8 @@ def publish_beacon(session_id: str, turn_count: int, ctx_chars: int) -> None:
         "machine": platform.node(),
         "last_run": now_ts,
         "exit_code": 0,
-        "summary": f"flush spawned for session {session_id[:8]} ({turn_count} turns, {ctx_chars} chars)",
+        "summary": (f"catch-up liveness ping ({session_id})" if session_id.startswith("catchup-")
+                    else f"flush spawned for session {session_id[:8]} ({turn_count} turns, {ctx_chars} chars)"),
         "version": "1.0.0",
     }
     body = json.dumps(payload, separators=(",", ":"))
