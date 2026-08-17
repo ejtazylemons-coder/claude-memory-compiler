@@ -7,7 +7,19 @@ REM Force UTF-8 stdout/stderr (same fix as weekly-rollup, prevents cp1252 crashe
 set PYTHONIOENCODING=utf-8
 
 cd /d C:\Dev\claude-memory-compiler
-"%USERPROFILE%\.local\bin\uv.exe" run python scripts\monthly-state-synthesis.py >> scripts\monthly-state-synthesis.log 2>&1
+
+REM Resolve uv robustly (2026-08-16, exit-9009 fix): the old hardcoded
+REM ~\.local\bin\uv.exe vanished; uv is pip-installed under Python312\Scripts.
+REM Same resolver order as weekly-lint.ps1: PATH first, then known locations.
+set "UV=uv.exe"
+where uv >nul 2>&1
+if errorlevel 1 (
+  set "UV=%USERPROFILE%\AppData\Local\Programs\Python\Python312\Scripts\uv.exe"
+  if not exist "%UV%" set "UV=%USERPROFILE%\.local\bin\uv.exe"
+  if not exist "%UV%" set "UV=%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe"
+)
+
+"%UV%" run python scripts\monthly-state-synthesis.py >> scripts\monthly-state-synthesis.log 2>&1
 set RC=%ERRORLEVEL%
 
 REM Push beacon to Homebase (failure ignored - synthesis success shouldn't depend on network)
