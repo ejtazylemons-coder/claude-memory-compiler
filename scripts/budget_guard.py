@@ -137,18 +137,21 @@ def telegram_alert(text: str) -> bool:
     Returns True on success, False on any failure (including missing creds).
     Does not raise — alerts must never block the main flow.
     """
-    env_path = ROOT_DIR / ".env"
-    if not env_path.exists():
-        return False
-
+    # 2026-08-24: repo .env is absent on LOLA-001, so the Aug-16 AUTO-DISABLED
+    # alert silently went nowhere. ~/.claude/secrets.env is the live cred store.
     token = ""
     chat_id = ""
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("TELEGRAM_BOT_TOKEN="):
-            token = line.split("=", 1)[1].strip()
-        elif line.startswith("TELEGRAM_CHAT_ID="):
-            chat_id = line.split("=", 1)[1].strip()
+    for env_path in (Path.home() / ".claude" / "secrets.env", ROOT_DIR / ".env"):
+        if not env_path.exists():
+            continue
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip().removeprefix("export ")
+            if line.startswith("TELEGRAM_BOT_TOKEN="):
+                token = line.split("=", 1)[1].strip().strip('"')
+            elif line.startswith("TELEGRAM_CHAT_ID="):
+                chat_id = line.split("=", 1)[1].strip().strip('"')
+        if token and chat_id:
+            break
 
     if not token or not chat_id:
         return False
