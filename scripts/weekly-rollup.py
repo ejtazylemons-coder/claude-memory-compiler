@@ -216,7 +216,7 @@ def main():
     logs = last_7_days_logs()
     if not logs:
         print("No daily logs in the last 7 days. Nothing to roll up.")
-        return
+        sys.exit(3)  # 3 = legitimately nothing to do — NOT a silent failure
 
     iso_year, iso_week, _ = date.today().isocalendar()
     output_path = WEEKLY_DIR / f"{iso_year}-W{iso_week:02d}.md"
@@ -236,7 +236,7 @@ def main():
 
     if remaining <= 0.05:
         print("Monthly budget exhausted. Skipping.")
-        sys.exit(0)
+        sys.exit(3)  # 3 = intentional skip — NOT a silent failure
 
     result = asyncio.run(run_rollup(logs, output_path, remaining))
     cost = result["cost"]

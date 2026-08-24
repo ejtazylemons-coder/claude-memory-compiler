@@ -280,7 +280,10 @@ def main() -> int:
             print(f"  errorlog rollup exited {errorlog_exit} (non-fatal — does not block overall_ok)")
 
     # ── Verify + record ────────────────────────────────────────────────
-    rollup_ok = args.compile_only or (rollup_exit == 0 and rollup_output_existed)
+    # rollup exit 3 = legitimately nothing to do (empty week / budget skip) — ok, not silent-zero.
+    # This was the 2026-08-16 auto-disable: two lights-out-less weeks produced no daily
+    # logs, the empty rollup was miscounted as silent failure x2.
+    rollup_ok = args.compile_only or rollup_exit == 3 or (rollup_exit == 0 and rollup_output_existed)
     compile_ok = args.rollup_only or (compile_exit == 0 and (compiled_this_run > 0 or compile_count_before == 0))
 
     # ErrorLog phase is best-effort — failure does NOT flip overall_ok.

@@ -111,7 +111,9 @@ def _grace_hours(cadence: str) -> float:
 
 def _slug_of(yaml_path: Path) -> str | None:
     try:
-        for line in yaml_path.read_text(encoding="utf-8").splitlines():
+        # utf-8-sig: Windows-authored worker yamls may carry a BOM, which broke
+        # the ^slug: match and reported every worker as "not found" (2026-08-24).
+        for line in yaml_path.read_text(encoding="utf-8-sig").splitlines():
             m = re.match(r"^slug:\s*(\S+)", line)
             if m:
                 return m.group(1)
