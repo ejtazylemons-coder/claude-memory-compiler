@@ -163,7 +163,11 @@ def main() -> int:
     # ── Pre-flight: budget ─────────────────────────────────────────────
     remaining, soft_warn, hard_cap = budget_guard.check_remaining()
     budget = budget_guard.load_combined_budget()
-    print(f"Budget: ${budget['spent']:.4f} spent this month, ${remaining:.4f} remaining")
+    # Quota-vs-billing label: with no ANTHROPIC_API_KEY the SDK runs on
+    # subscription auth and these figures are token accounting, not money
+    # (feedback_memory_compiler_zero_llm_cost — don't let "$" read as billing).
+    billing = "API-billed" if os.environ.get("ANTHROPIC_API_KEY") else "quota, not billed"
+    print(f"Budget ({billing}): ${budget['spent']:.4f} spent this month, ${remaining:.4f} remaining")
 
     if hard_cap:
         msg = (
@@ -361,7 +365,8 @@ def main() -> int:
         exit_code = 0
         summary = (
             f"rollup={rollup_ok} compile={compile_ok} cost=${this_run_cost:.4f} "
-            f"month=${final_budget['spent']:.4f}"
+            f"month=${final_budget['spent']:.4f} "
+            f"({'API-billed' if os.environ.get('ANTHROPIC_API_KEY') else 'quota, not billed'})"
         )
     elif silent_zero_detected:
         exit_code = 2  # warn
