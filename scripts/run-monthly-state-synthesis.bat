@@ -25,6 +25,7 @@ set RC=%ERRORLEVEL%
 REM Push beacon to Homebase (failure ignored - synthesis success shouldn't depend on network)
 REM -WindowStyle Hidden per feedback_windows_hooks_hidden.md
 powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ^
+  "$OutputEncoding = New-Object System.Text.UTF8Encoding($false);" ^
   "$ts = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz');" ^
   "$body = @{ name = 'monthly-state-synthesis'; machine = $env:COMPUTERNAME; last_run = $ts; exit_code = %RC%; summary = 'monthly state synthesis run'; version = '1.0.0' } | ConvertTo-Json -Compress;" ^
   "$body | ssh homebase 'cat > /root/hestia/beacons/monthly-state-synthesis.json'" >> scripts\monthly-state-synthesis.log 2>&1
