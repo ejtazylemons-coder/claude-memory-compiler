@@ -49,6 +49,7 @@ async def compile_daily_log(log_path: Path, state: dict) -> float:
     from claude_agent_sdk import (
         AssistantMessage,
         ClaudeAgentOptions,
+        ProcessError,
         ResultMessage,
         TextBlock,
         query,
@@ -156,6 +157,17 @@ Read the daily log above and compile it into wiki articles following the schema 
         if len(stderr_tail) > 50:
             del stderr_tail[0]
 
+    # RESULT SUBTYPE — the third exit-1 cause (2026-09-06). The nested CLI exits
+    # 1 whenever its ResultMessage subtype is an error (error_max_turns,
+    # error_max_budget_usd, error_during_execution) even though the articles were
+    # already written; the SDK then raises ProcessError("Command failed with exit
+    # code 1") AFTER the result was delivered. Without recording the subtype the
+    # failure reads as a blank "exit code 1" with nothing on stderr. Keep the
+    # result so the error path can say WHICH cap was hit, and so a ProcessError
+    # that follows a *successful* result is treated as noise, not failure.
+    result_subtype: str | None = None
+    result_turns: int | None = None
+
     try:
         async for message in query(
             prompt=prompt,
@@ -170,7 +182,13 @@ Read the daily log above and compile it into wiki articles following the schema 
                 # allowed or bundled CC's Write/Edit will crash with exit 1.
                 # See weekly-rollup.py for the same fix + history.
                 add_dirs=[str(KB_ROOT)],
-                max_turns=30,
+                # Turn ceiling. 30 was too low: a content-rich daily (2026-06-14,
+                # 9.9KB) wrote its articles + index + log and then hit the cap at
+                # ~$0.90, so the CLI exited 1 and the file was never marked
+                # ingested (RED beacon 2026-09-06). Each Read/Write/Edit is a
+                # turn; a day that yields 6+ articles needs well over 30. The
+                # $ budget below is the real runaway guard; this is a loop guard.
+                max_turns=80,
                 # Per-file safety ceiling. A real compile of a content-rich daily
                 # log costs ~$0.3–0.6; the old $0.50 cap was BELOW typical cost, so
                 # the CLI hit the ceiling (ResultMessage subtype=error_max_budget_usd)
@@ -198,14 +216,30 @@ Read the daily log above and compile it into wiki articles following the schema 
                         pass  # compilation output - LLM writes files directly
             elif isinstance(message, ResultMessage):
                 cost = message.total_cost_usd or 0.0
-                print(f"  Cost: ${cost:.4f}")
+                result_subtype = message.subtype
+                result_turns = message.num_turns
+                print(f"  Cost: ${cost:.4f}  result={result_subtype}  turns={result_turns}")
+    except ProcessError as e:
+        if result_subtype == "success":
+            # The work finished and the result said so; the CLI's non-zero exit
+            # on shutdown is not a compile failure. Record it and move on.
+            print(f"  Warning: nested CLI exited non-zero after a successful result ({e}) — ignored")
+        else:
+            error_raised = e
+            print(f"  Error: {type(e).__name__}: {e}")
+            if result_subtype:
+                print(f"  Result subtype: {result_subtype} (turns={result_turns}) — the CLI exits 1 on an error-subtype result")
     except Exception as e:
         error_raised = e
         print(f"  Error: {type(e).__name__}: {e}")
-        if stderr_tail:
-            print("  --- nested CLI stderr (last lines) ---")
-            for _l in stderr_tail[-20:]:
-                print(f"  | {_l}")
+    if error_raised is not None and stderr_tail:
+        print("  --- nested CLI stderr (last lines) ---")
+        for _l in stderr_tail[-20:]:
+            print(f"  | {_l}")
+    if error_raised is None and result_subtype not in (None, "success"):
+        # The stream ended cleanly but the result itself reports a cap hit.
+        error_raised = RuntimeError(f"compile ended with result subtype {result_subtype} (turns={result_turns})")
+        print(f"  Error: {error_raised}")
 
     # Only record state if the compile didn't raise. A bare $0 cost (with no
     # exception) still updates state — the LLM may have legitimately decided
