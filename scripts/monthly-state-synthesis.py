@@ -31,6 +31,7 @@ HANDOFF_DIR = Path("C:/Obsidian/Second Brain/Claude/Handoff")
 DAILY_DIR = KB_ROOT / "daily"
 MEMORY_DIR = Path.home() / ".claude" / "projects" / "C--Dev-workspace" / "memory"
 DECISION_LOG = Path("C:/Dev/pantheon/decisions/decisions.csv")
+SOUL_DIR = Path("C:/Dev/workspace/soul")  # SOUL.md (core) + LEDGER.md (hypotheses about Mr.TL); private repo, read at runtime only
 
 BUDGET_FILE = SCRIPTS_DIR / "monthly-state-budget.json"
 PER_RUN_CAP_USD = 0.50
@@ -159,6 +160,15 @@ def assemble_input_blob(month_label: str) -> tuple[str, dict]:
 
     sections = []
 
+    soul_parts = []
+    for name in ("SOUL.md", "LEDGER.md"):
+        f = SOUL_DIR / name
+        if f.exists():
+            soul_parts.append(f"### {name}\n\n{f.read_text(encoding='utf-8')}")
+    if soul_parts:
+        body = truncate("\n\n".join(soul_parts), 20000, 'soul')
+        sections.append(f"## Claude's soul and ledger (the purpose to check against)\n\n{body}")
+
     if prior_state:
         body = prior_state.read_text(encoding="utf-8")
         sections.append(f"## Prior month's state file: {prior_state.name}\n\n{truncate(body, 20000, 'prior state')}")
@@ -255,6 +265,14 @@ Honest, not diplomatic. 4-6 bullets.)
 ## Things to watch
 (Anti-patterns you're seeing in him *or* in yourself. Things you'd push back on next month if you
 saw them again. If you're not flagging anything, you're hedging — find at least 2.)
+
+## Soul check
+(Only if the soul and ledger were in the inputs. Run the after-action review against the soul's
+Intent: what was supposed to happen for Mr.TL this month across health, money, work, people, mind;
+what happened; why the gap; what to keep and what to change. Then list ledger PROPOSALS, each with
+its evidence: confirm, retire, or add a pattern or strength. Name at least one moment where Claude
+agreed with Mr.TL when the data said otherwise, or say plainly you found none. Proposals only;
+this file never edits the soul or the ledger.)
 ```
 
 ## Rules
