@@ -38,7 +38,7 @@ KNOWLEDGE_DIR = KB_ROOT / "knowledge"
 DAILY_DIR = KB_ROOT / "daily"
 INDEX_FILE = KNOWLEDGE_DIR / "index.md"
 
-MAX_CONTEXT_CHARS = 20_000
+MAX_CONTEXT_CHARS = 8_000   # 2026-09-28: was 20_000, and the index dump ate all of it
 MAX_LOG_LINES = 30
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -188,6 +188,13 @@ def get_recent_log() -> str:
     return "(no recent daily log)"
 
 
+def _article_count() -> int:
+    try:
+        return sum(1 for _ in (KNOWLEDGE_DIR / "concepts").glob("*.md"))
+    except OSError:
+        return 0
+
+
 def build_context(pull_output: str = "", gate_banner: str = "") -> str:
     """Assemble the context to inject into the conversation."""
     parts = []
@@ -201,21 +208,22 @@ def build_context(pull_output: str = "", gate_banner: str = "") -> str:
     today = datetime.now(timezone.utc).astimezone()
     parts.append(f"## Today\n{today.strftime('%A, %B %d, %Y')}")
 
-    # Knowledge base index (the core retrieval mechanism)
-    if INDEX_FILE.exists():
-        index_content = INDEX_FILE.read_text(encoding="utf-8")
-        parts.append(f"## Knowledge Base Index\n\n{index_content}")
-    else:
-        parts.append("## Knowledge Base Index\n\n(empty - no articles compiled yet)")
-
-    # Recent daily log
-    recent_log = get_recent_log()
-    parts.append(f"## Recent Daily Log\n\n{recent_log}")
-
-    # BM25 pull retrieval (Phase 4 — auto-consulted at session start, AC5)
+    # BM25 pull retrieval FIRST (Phase 4, AC5). Until 2026-09-28 the full index
+    # (85 KB) sat here and the 20K-char cut threw the pull away every session.
     # Error strings from _run_mem_pull start with "(" and are not injected as context.
     if pull_output and not pull_output.startswith("("):
         parts.append(f"## Memory Pull (BM25)\n\n{pull_output}")
+
+    # Recent daily log (tail only)
+    recent_log = get_recent_log()
+    parts.append(f"## Recent Daily Log\n\n{recent_log}")
+
+    # One-line pointer instead of the index dump; search on demand.
+    parts.append(
+        f"## Knowledge Base\n{_article_count()} compiled articles in the Obsidian wiki "
+        f"(index: {INDEX_FILE}). Search on demand, zero tokens: "
+        f'`python {MEM_PY} search "<terms>" -n 5`'
+    )
 
     context = "\n\n---\n\n".join(parts)
 
