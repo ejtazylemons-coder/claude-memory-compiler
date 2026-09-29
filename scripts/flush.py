@@ -75,6 +75,14 @@ def append_to_daily_log(content: str, section: str = "Session") -> None:
         f.write(entry)
 
 
+def _neutral_cwd() -> Path:
+    """A directory outside any repo, so the child CLI finds no project settings."""
+    import tempfile
+    d = Path(tempfile.gettempdir()) / "claude-memory-flush"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 async def run_flush(context: str) -> str:
     """Use Claude Agent SDK to extract important knowledge from conversation context."""
     from claude_agent_sdk import (
@@ -116,6 +124,9 @@ Skip entirely:
 - Action items, TODOs, or follow-ups (ephemeral — not knowledge)
 - Trivial tool calls, file reads, or back-and-forth clarification
 
+Only report what is literally in the context below. Never invent turns, requests, files, systems or
+outcomes that are not there. If the context is short, trivial, or a test, respond with exactly: FLUSH_OK
+
 If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
 
 ## Conversation Context
@@ -123,14 +134,26 @@ If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
 {context}"""
 
     response = ""
+    stderr_lines: list[str] = []  # 2026-09-28: three flushes failed as "exit code 1" with no reason
 
     try:
         async for message in query(
             prompt=prompt,
             options=ClaudeAgentOptions(
-                cwd=str(ROOT),
+                cwd=str(_neutral_cwd()),
                 allowed_tools=[],
                 max_turns=2,
+                stderr=lambda line: stderr_lines.append(line.rstrip()),
+                # 2026-09-28: the child CLI was loading ~/.claude/settings.json and firing the
+                # user's SessionEnd hooks; one got 'Hook cancelled' at exit and the run failed.
+                # The SDK drops the flag on an empty list, so: project sources only, from a
+                # cwd with no project. Result: no hooks of any kind in the child.
+                setting_sources=["project"],
+                # Pinned: the child no longer inherits his model pick; default was inventing content.
+                model="claude-opus-5",
+                system_prompt=("You extract durable technical notes from a Claude Code session transcript. "
+                               "You only restate what the transcript contains. You never invent, extend or "
+                               "guess. When in doubt, answer FLUSH_OK."),
             ),
         ):
             if isinstance(message, AssistantMessage):
@@ -141,8 +164,11 @@ If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
                 pass
     except Exception as e:
         import traceback
-        logging.error("Agent SDK error: %s\n%s", e, traceback.format_exc())
-        response = f"FLUSH_ERROR: {type(e).__name__}: {e}"
+        tail = [l for l in stderr_lines if l.strip()][-20:]
+        logging.error("Agent SDK error: %s\n%s\nCLI stderr (last %d lines):\n%s",
+                      e, traceback.format_exc(), len(tail), "\n".join(tail))
+        reason = tail[-1] if tail else "no stderr captured"
+        response = f"FLUSH_ERROR: {type(e).__name__}: {e} | cli: {reason}"
 
     return response
 
@@ -190,6 +216,12 @@ def main():
         return
 
     logging.info("Flushing session %s: %d chars", session_id, len(context))
+    MIN_CONTEXT_CHARS = 600  # 2026-09-28: a 45-char test context produced an invented session
+    if len(context) < MIN_CONTEXT_CHARS:
+        logging.info("Result: skipped, context too short (%d chars) - no model call", len(context))
+        save_flush_state({"session_id": session_id, "timestamp": time.time()})
+        context_file.unlink(missing_ok=True)
+        return
 
     # Run the LLM extraction
     response = asyncio.run(run_flush(context))

@@ -1,5 +1,7 @@
 # LLM Personal Knowledge Base
 
+> **2026-09-28 (Mr.TL's harness):** the weekly LLM concept compile is retired. It ran 11 weeks behind under a quota cap and the concept articles were the part nobody read. Session notes are still written by the model at session end (`hooks/session-end.py` -> `scripts/flush.py`), and `mem.py search` covers the daily notes directly (BM25, zero tokens), so everything is searchable the moment it is written. The 303 existing concept articles stay searchable. Scheduled tasks `ClaudeWeeklyCompile` and `ClaudeMemoryWeeklyLint` are disabled; `ClaudeMonthlyStateSynthesis` stays.
+
 **Your AI conversations compile themselves into a searchable knowledge base.**
 
 Adapted from [Karpathy's LLM Knowledge Base](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) architecture, but instead of clipping web articles, the raw data is your own conversations with Claude Code. When a session ends (or auto-compacts mid-session), Claude Code hooks capture the conversation transcript and spawn a background process that uses the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) to extract the important stuff - decisions, lessons learned, patterns, gotchas - and appends it to a daily log. You then compile those daily logs into structured, cross-referenced knowledge articles organized by concept. Retrieval uses a simple index file instead of RAG - no vector database, no embeddings, just markdown.

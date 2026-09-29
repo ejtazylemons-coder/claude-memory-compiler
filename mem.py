@@ -10,7 +10,7 @@ zero tokens.
 
 Usage:
   python mem.py index                 # fresh one-line-summary index of all wiki pages
-  python mem.py search "<query>" [-n N] [--daily]
+  python mem.py search "<query>" [-n N] [--no-daily]
 """
 import argparse, glob, math, os, re, sys
 from collections import Counter
@@ -76,7 +76,7 @@ def title_and_summary(text, fallback):
     return title, summary
 
 
-def docs(include_daily=False):
+def docs(include_daily=True):
     paths = sorted(glob.glob(str(WIKI / "**" / "*.md"), recursive=True))
     if include_daily:
         paths += sorted(glob.glob(str(DAILY / "*.md")))
@@ -160,7 +160,10 @@ def main():
     sp = sub.add_parser("search", help="BM25 keyword search; pull the pages you need")
     sp.add_argument("query")
     sp.add_argument("-n", type=int, default=6, help="max results")
-    sp.add_argument("--daily", action="store_true", help="also search daily logs")
+    sp.add_argument("--daily", action="store_true", default=True,
+                    help="(default since 2026-09-28) daily notes are in the search")
+    sp.add_argument("--no-daily", dest="daily", action="store_false",
+                    help="concept articles only")
     sp.set_defaults(fn=cmd_search)
     args = ap.parse_args()
     args.fn(args)

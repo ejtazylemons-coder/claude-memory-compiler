@@ -1,5 +1,7 @@
 # AGENTS.md - Personal Knowledge Base Schema
 
+> **2026-09-28:** compile.py / weekly compile retired in this fork; daily notes are searched directly by `mem.py` (daily on by default). See README note.
+
 > Adapted from [Andrej Karpathy's LLM Knowledge Base](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) architecture.
 > Instead of ingesting external articles, this system compiles knowledge from your own AI conversations.
 
