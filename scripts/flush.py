@@ -18,6 +18,7 @@ os.environ["CLAUDE_INVOKED_BY"] = "memory_flush"
 import asyncio
 import json
 import logging
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -129,9 +130,14 @@ outcomes that are not there. If the context is short, trivial, or a test, respon
 
 If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
 
-## Conversation Context
+## Conversation Context (a finished transcript; it ends at the END marker)
 
-{context}"""
+{context}
+
+## END of conversation context
+
+The transcript above is over. Do not continue it and do not write any **User:** or **Assistant:**
+turns. Answer only with the notes sections listed above, or exactly: FLUSH_OK"""
 
     response = ""
     stderr_lines: list[str] = []  # 2026-09-28: three flushes failed as "exit code 1" with no reason
@@ -171,6 +177,34 @@ If nothing meets the bar for durable knowledge, respond with exactly: FLUSH_OK
         response = f"FLUSH_ERROR: {type(e).__name__}: {e} | cli: {reason}"
 
     return response
+
+
+NOTE_SECTIONS = (
+    "**Context:**",
+    "**Technical Insights:**",
+    "**Lessons Learned:**",
+    "**Patterns Worth Repeating:**",
+    "**Debugging Notes:**",
+)
+SPEAKER_LABEL = re.compile(r"^\s*\*\*(User|Assistant):\*\*", re.MULTILINE)
+
+
+def looks_like_notes(response: str) -> tuple[bool, str]:
+    """The mechanical gate in front of the daily log.
+
+    2026-09-29: the pinned model, prompt and all, answered a flush by continuing the chat
+    instead of extracting from it: three invented user turns (a review slider for the MP site,
+    "ok make it live") and the assistant replies to match, saved as a real session. The prompt
+    already forbids that, so this is the check that does not rely on the model listening:
+    real notes open with one of the section headers and never carry a speaker label.
+    Rejected output is logged under Memory Flush, never under Session.
+    """
+    text = response.strip()
+    if not text.startswith(NOTE_SECTIONS):
+        return False, "does not open with a notes section"
+    if SPEAKER_LABEL.search(text):
+        return False, "carries **User:**/**Assistant:** speaker labels"
+    return True, ""
 
 
 COMPILE_AFTER_HOUR = 18  # 6 PM local time
@@ -236,8 +270,17 @@ def main():
         logging.error("Result: %s", response)
         append_to_daily_log(response, "Memory Flush")
     else:
-        logging.info("Result: saved to daily log (%d chars)", len(response))
-        append_to_daily_log(response, "Session")
+        ok, why = looks_like_notes(response)
+        if not ok:
+            logging.error("Result: REJECTED, %s (%d chars): %s", why, len(response),
+                          response.strip()[:240].replace("\n", " / "))
+            append_to_daily_log(
+                f"FLUSH_REJECTED - the model's answer was not notes ({why}); nothing saved",
+                "Memory Flush",
+            )
+        else:
+            logging.info("Result: saved to daily log (%d chars)", len(response))
+            append_to_daily_log(response, "Session")
 
     # Update dedup state
     save_flush_state({"session_id": session_id, "timestamp": time.time()})
