@@ -33,8 +33,6 @@
 | name | type | cadence | trigger_ref | ops_slug | heartbeat_path |
 |------|------|---------|-------------|----------|----------------|
 | memory-compiler-flush | event | per-session | hook:session-end | memory-compiler-flush | scripts/last-flush.beacon.json |
-| claude-weekly-compile | scheduled | weekly Sun 8:30 | schtask:ClaudeWeeklyCompile | claude-weekly-compile | scripts/weekly-compile.beacon.json |
-| claude-memory-dream | scheduled | weekly Sun 8:00 | schtask:ClaudeMemoryWeeklyLint | claude-memory-dream | scripts/memory-dream.beacon.json |
 | claude-memory-reconciler | scheduled | daily | cron:claude-memory-reconciler | claude-memory-reconciler | /root/hestia/beacons/claude-memory-reconciler.json |
 | retrieval-pull | event | per-session | hook:session-start | none | none |
 
