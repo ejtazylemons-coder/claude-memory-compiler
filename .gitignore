@@ -51,3 +51,11 @@ scripts/verdict-cache.json
 scripts/break-glass-audit.jsonl
 scripts/break-glass-token.json
 .codex/
+
+# keys and credentials never go in git (housekeeping 2026-10-01)
+*.pem
+*.key
+credentials/
+token*.json
+.env.*
+!.env.example
