@@ -24,10 +24,21 @@ set RC=%ERRORLEVEL%
 
 REM Push beacon to Homebase (failure ignored - synthesis success shouldn't depend on network)
 REM -WindowStyle Hidden per feedback_windows_hooks_hidden.md
+REM
+REM The beacon MUST be UTF-8 with NO BOM: Homebase parses it with Python json.loads
+REM (beacon_healthy.py), which rejects a BOM outright. See ADR-019.
+REM History: piping $body into `ssh` relies on $OutputEncoding to pick the stdin
+REM encoding. That knob was set to UTF8Encoding($false) on 2026-08-27, held for the
+REM Sep 1 run, and silently produced a BOM again on Oct 1 (the 4th BOM bite) - the
+REM check went red while the synthesis itself was perfectly healthy. So stop piping:
+REM write the bytes to a file and scp it, the pattern push_lola_health.ps1 has used
+REM from this same laptop without a single BOM.
 powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ^
-  "$OutputEncoding = New-Object System.Text.UTF8Encoding($false);" ^
   "$ts = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz');" ^
   "$body = @{ name = 'monthly-state-synthesis'; machine = $env:COMPUTERNAME; last_run = $ts; exit_code = %RC%; summary = 'monthly state synthesis run'; version = '1.0.0' } | ConvertTo-Json -Compress;" ^
-  "$body | ssh homebase 'cat > /root/hestia/beacons/monthly-state-synthesis.json'" >> scripts\monthly-state-synthesis.log 2>&1
+  "$tmp = Join-Path $env:TEMP 'monthly-state-synthesis-beacon.json';" ^
+  "[System.IO.File]::WriteAllText($tmp, $body, (New-Object System.Text.UTF8Encoding($false)));" ^
+  "scp -B -q $tmp 'homebase:/root/hestia/beacons/monthly-state-synthesis.json';" ^
+  "if ($LASTEXITCODE -ne 0) { Write-Output ('beacon scp FAILED exit=' + $LASTEXITCODE) } else { Write-Output 'beacon pushed utf8-no-bom' }" >> scripts\monthly-state-synthesis.log 2>&1
 
 exit /b %RC%
