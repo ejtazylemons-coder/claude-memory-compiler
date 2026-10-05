@@ -34,8 +34,12 @@ DECISION_LOG = Path("C:/Dev/pantheon/decisions/decisions.csv")
 SOUL_DIR = Path("C:/Dev/workspace/soul")  # SOUL.md (core) + LEDGER.md (hypotheses about Mr.TL); private repo, read at runtime only
 
 BUDGET_FILE = SCRIPTS_DIR / "monthly-state-budget.json"
-PER_RUN_CAP_USD = 0.50
-ANNUAL_CAP_USD = 8.00
+# The laptop has no API key, so these are quota figures, not a bill: the cap only guards
+# against a runaway loop. 0.50 was passed on 2026-10-01 (0.30 -> 0.42 -> 0.60 as the inputs
+# grew to their truncation ceiling); the CLI then exits 1 AFTER the file is written, which
+# reads as an error for a healthy run. Lifted 2026-10-05 (R10 of the ops routines review).
+PER_RUN_CAP_USD = 1.00
+ANNUAL_CAP_USD = 12.00
 
 
 def load_budget() -> dict:
