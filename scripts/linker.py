@@ -128,7 +128,10 @@ def link_text(text: str, articles: list[dict]) -> tuple[str, list[str]]:
     pat, by_term = _term_regex(articles)
     if pat is None:
         return text, []
-    linked: list[str] = []
+    # Articles the note already links (a re-run, or the model wrote one) are not linked again,
+    # otherwise a second pass would link every article's second mention.
+    linked: list[str] = list(dict.fromkeys(re.findall(r"\[\[([^\]|#]+)", text)))
+    seeded = len(linked)
 
     def sub(m: re.Match) -> str:
         target = by_term.get(m.group(1).lower())
@@ -143,7 +146,7 @@ def link_text(text: str, articles: list[dict]) -> tuple[str, list[str]]:
         out.append(prot.group(0))
         pos = prot.end()
     out.append(pat.sub(sub, text[pos:]))
-    return "".join(out), linked
+    return "".join(out), linked[seeded:]
 
 
 def related(text: str, articles: list[dict], exclude: list[str]) -> list[dict]:
@@ -168,11 +171,11 @@ def link_note(text: str, articles: list[dict] | None = None) -> str:
         articles = load_articles()
     if not articles:
         return text
-    new_text, linked = link_text(text, articles)
+    new_text, _ = link_text(text, articles)
     if "**Related:**" not in new_text:
-        # links the note already carried (a re-run, or the model wrote one) count as linked too
+        # everything linked inline, old or new, stays out of the Related line
         already = re.findall(r"\[\[([^\]|#]+)", new_text)
-        picks = related(text, articles, exclude=linked + already)
+        picks = related(text, articles, exclude=already)
         if picks:
             line = " · ".join(f"[[{a['target']}|{a['title']}]]" for a in picks)
             new_text = new_text.rstrip() + f"\n\n**Related:** {line}"

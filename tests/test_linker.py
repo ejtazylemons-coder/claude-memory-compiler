@@ -32,16 +32,27 @@ def test_links_first_mention_only_and_longest_term_wins():
 
 
 def test_code_links_and_urls_are_left_alone():
-    text = ("Run `flush.py` first. See [[concepts/memory-compiler]] and "
+    text = ("Run `flush.py` first. See [[concepts/td-bank-transfers]] and "
             "[flush.py](https://example.com/flush.py) at https://example.com/TD Bank\n"
             "```\nflush.py TD Bank\n```\nThen flush.py again.")
     out, linked = linker.link_text(text, ARTICLES)
     assert "`flush.py`" in out
-    assert "[[concepts/memory-compiler]]" in out
+    assert "[[concepts/td-bank-transfers]]" in out
     assert "[flush.py](https://example.com/flush.py)" in out
     assert "```\nflush.py TD Bank\n```" in out
     assert out.endswith("Then [[concepts/memory-compiler|flush.py]] again.")
     assert linked == ["concepts/memory-compiler"]
+
+
+def test_second_pass_changes_nothing():
+    text = "TD Bank once. TD Bank twice. Memory Compiler here, memory compiler there."
+    once, linked = linker.link_text(text, ARTICLES)
+    assert once.count("[[") == 2 and linked == ["concepts/td-bank-transfers", "concepts/memory-compiler"]
+    twice, linked_again = linker.link_text(once, ARTICLES)
+    assert twice == once and linked_again == []
+    # an article the note already links by hand is not linked a second time
+    out, linked = linker.link_text("See [[concepts/td-bank-transfers|the bank]]. TD Bank again.", ARTICLES)
+    assert linked == [] and out.endswith("TD Bank again.")
 
 
 def test_whole_words_only():
