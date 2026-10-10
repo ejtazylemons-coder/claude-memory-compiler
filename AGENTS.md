@@ -343,10 +343,13 @@ Commands use simple relative paths from the project root. Empty `matcher` catche
 
 **`session-start.py`** (SessionStart)
 - Pure local I/O, no API calls, runs in under 1 second
-- Reads `knowledge/index.md` and the most recent daily log
+- Injects the tail of the most recent daily log plus ONE line about the knowledge base (note and
+  article counts, newest note, the `mem.py search` command). Nothing else is pre-loaded.
+- 2026-10-10: the BM25 pull that injected five search hits here was removed (never shown to be used;
+  its fallback query surfaced empty days). History is searched on demand. A CANARY line appears when
+  the newest session note is more than 8 days old.
 - Outputs JSON to stdout: `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}`
-- Claude sees the knowledge base index at the start of every session
-- Max context: 20,000 characters
+- Max context: 8,000 characters
 
 **`session-end.py`** (SessionEnd)
 - Reads hook input from stdin (JSON with `session_id`, `transcript_path`, `cwd`)
@@ -375,7 +378,11 @@ This ensures flush.py survives after Claude Code's hook process exits.
 2. Reads the pre-extracted conversation context from the temp `.md` file
 3. Skips if context is empty or if same session was flushed within 60 seconds (deduplication)
 4. Calls Claude Agent SDK (`query()` with `allowed_tools=[]`, `max_turns=2`)
-5. Claude decides what's worth saving - returns structured bullet points or `FLUSH_OK`
+5. Claude decides what's worth saving - returns structured bullet points (Facts and Decisions first,
+   since 2026-10-10) or `FLUSH_OK`. `FLUSH_OK` is logged only; it no longer writes a section to the
+   daily note. Saved notes pass through `scripts/linker.py` (plain code): mentions of existing article
+   titles and aliases become `[[links]]` and a Related line adds the closest articles by BM25, so the
+   Obsidian graph grows with every session without a model compile.
 6. Appends result to `daily/YYYY-MM-DD.md`
 7. Cleans up temp context file
 8. **End-of-day auto-compilation:** If it's past 6 PM local time (`COMPILE_AFTER_HOUR = 18`) and today's daily log has changed since its last compilation (hash comparison against `state.json`), spawns `compile.py` as another detached background process. This means compilation happens automatically once a day without needing a cron job or manual trigger.

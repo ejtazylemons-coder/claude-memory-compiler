@@ -94,28 +94,29 @@ async def run_flush(context: str) -> str:
         query,
     )
 
-    prompt = f"""Review the conversation context below and extract only durable technical knowledge.
+    prompt = f"""Review the conversation context below and extract only durable knowledge.
 Do NOT use any tools — just return plain text.
 
-This knowledge base captures what was *learned* — not preferences, not decisions about how Claude
-should behave, not project setup. Those live elsewhere. Focus only on things that would help
-someone understand a system better six months from now.
+This knowledge base is searched later by keyword when a question needs what an earlier session
+found. Facts and decisions are what get looked up; generic lessons are not. Lead with the concrete.
 
-Format your response with only the sections that have real content:
+Format your response with only the sections that have real content, in this order:
 
 **Context:** [One line: what system/problem was being worked on]
 
-**Technical Insights:**
-- [New things discovered: API behaviors, library quirks, architectural decisions with rationale]
+**Facts:**
+- [Concrete things established about a system, account, tool, person's setup, number, name or
+  date: how X actually behaves, what Y costs, where Z lives, which setting did what. Name the
+  system; include the number]
 
-**Lessons Learned:**
-- [What worked, what didn't, root causes discovered, debugging breakthroughs]
-
-**Patterns Worth Repeating:**
-- [Reusable approaches, idioms, or design patterns observed in this session]
+**Decisions:**
+- [What was decided and the reason given, e.g. "kept X because Y", "dropped Z because W"]
 
 **Debugging Notes:**
 - [Specific errors encountered and their solutions — reference the system, not the conversation]
+
+**Lessons Learned:**
+- [Only a lesson that is specific to a system or situation; skip anything that reads as general advice]
 
 Skip entirely:
 - Behavioral/workflow preferences for the assistant ("don't do X", "always Y") → those go in Claude memory
@@ -124,6 +125,7 @@ Skip entirely:
 - Routine operations: sync up, lights out, config backups, git commits
 - Action items, TODOs, or follow-ups (ephemeral — not knowledge)
 - Trivial tool calls, file reads, or back-and-forth clarification
+- General best-practice advice that is not tied to something seen in this session
 
 Only report what is literally in the context below. Never invent turns, requests, files, systems or
 outcomes that are not there. If the context is short, trivial, or a test, respond with exactly: FLUSH_OK
@@ -181,7 +183,9 @@ turns. Answer only with the notes sections listed above, or exactly: FLUSH_OK"""
 
 NOTE_SECTIONS = (
     "**Context:**",
-    "**Technical Insights:**",
+    "**Facts:**",            # 2026-10-10: facts and decisions lead; they are what gets searched for
+    "**Decisions:**",
+    "**Technical Insights:**",  # older notes still open with these
     "**Lessons Learned:**",
     "**Patterns Worth Repeating:**",
     "**Debugging Notes:**",
@@ -205,6 +209,20 @@ def looks_like_notes(response: str) -> tuple[bool, str]:
     if SPEAKER_LABEL.search(text):
         return False, "carries **User:**/**Assistant:** speaker labels"
     return True, ""
+
+
+def link_articles(notes: str) -> str:
+    """2026-10-10: plain-code [[links]] to existing wiki articles plus a Related line, so the
+    Obsidian graph grows with every session now that the model compile is gone. A linker fault
+    must never cost the note itself, so any exception returns the notes unlinked."""
+    try:
+        import linker
+        linked = linker.link_note(notes)
+        logging.info("Linker: %d links in the note", linked.count("[["))
+        return linked
+    except Exception as e:  # noqa: BLE001 - the note is worth more than the links
+        logging.error("Linker failed, saving the note unlinked: %s", e)
+        return notes
 
 
 COMPILE_AFTER_HOUR = 18  # 6 PM local time
@@ -262,10 +280,9 @@ def main():
 
     # Append to daily log
     if "FLUSH_OK" in response:
-        logging.info("Result: FLUSH_OK")
-        append_to_daily_log(
-            "FLUSH_OK - Nothing worth saving from this session", "Memory Flush"
-        )
+        # 2026-10-10: logged here only. 69 daily notes carried a "Nothing worth saving" section,
+        # and those were ranking in search (two of today's top-5 pull hits were empty days).
+        logging.info("Result: FLUSH_OK (nothing saved; not written to the daily log)")
     elif "FLUSH_ERROR" in response:
         logging.error("Result: %s", response)
         append_to_daily_log(response, "Memory Flush")
@@ -280,7 +297,7 @@ def main():
             )
         else:
             logging.info("Result: saved to daily log (%d chars)", len(response))
-            append_to_daily_log(response, "Session")
+            append_to_daily_log(link_articles(response), "Session")
 
     # Update dedup state
     save_flush_state({"session_id": session_id, "timestamp": time.time()})

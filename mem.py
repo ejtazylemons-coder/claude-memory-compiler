@@ -76,6 +76,11 @@ def title_and_summary(text, fallback):
     return title, summary
 
 
+# 2026-10-10: "### Memory Flush" sections are flush bookkeeping (FLUSH_OK / errors), not knowledge.
+# Older daily notes still carry them; they are dropped before indexing so an empty day never ranks.
+FLUSH_SECTION = re.compile(r"(?ms)^### Memory Flush \([^)]*\)\n.*?(?=^### |\Z)")
+
+
 def docs(include_daily=True):
     paths = sorted(glob.glob(str(WIKI / "**" / "*.md"), recursive=True))
     if include_daily:
@@ -85,6 +90,8 @@ def docs(include_daily=True):
         if Path(p).name.lower() in ("index.md", "log.md"):
             continue  # meta-files, not content pages — they match everything
         text = _read(p)
+        if Path(p).parent == DAILY:
+            text = FLUSH_SECTION.sub("", text)
         if not text.strip():
             continue
         rel = os.path.relpath(p, WIKI.parent)

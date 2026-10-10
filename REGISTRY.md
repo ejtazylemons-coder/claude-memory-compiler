@@ -44,4 +44,5 @@
 >   wired as an **Ops critical-slug** (Phase 2) so it cannot be disabled/archived while the fleet
 >   shows green (AC1b).
 > - `retrieval-pull` is advisory (event/`none`): it writes `scripts/retrieval-pull.beacon.json`
->   at session start but has no Ops worker and is not gated.
+>   at session start but has no Ops worker and is not gated. Since 2026-10-10 the hook injects a
+>   one-line pointer instead of search hits (summary "pointer only ..."); retrieval is on demand.

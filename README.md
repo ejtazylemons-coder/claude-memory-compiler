@@ -1,5 +1,7 @@
 # LLM Personal Knowledge Base
 
+> **2026-10-10 (settled, four-lens research + audit; `workspace/research/memory-setup-2026-10-10.md`):** no model compile, on Claude or a local GPU. The session-end flush stays (facts and decisions first; `FLUSH_OK` is logged, not written). The start-of-session hook injects one pointer line instead of five search hits; history is searched on demand with `mem.py search`. `scripts/linker.py` (plain code, inside the flush) turns mentions of existing article titles into `[[links]]` and adds a Related line, so the Obsidian graph keeps growing at zero usage.
+>
 > **2026-09-28 (Mr.TL's harness):** the weekly LLM concept compile is retired. It ran 11 weeks behind under a quota cap and the concept articles were the part nobody read. Session notes are still written by the model at session end (`hooks/session-end.py` -> `scripts/flush.py`), and `mem.py search` covers the daily notes directly (BM25, zero tokens), so everything is searchable the moment it is written. The 303 existing concept articles stay searchable. Scheduled tasks `ClaudeWeeklyCompile` and `ClaudeMemoryWeeklyLint` are disabled; `ClaudeMonthlyStateSynthesis` stays.
 
 **Your AI conversations compile themselves into a searchable knowledge base.**
